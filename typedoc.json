@@ -1,13 +1,15 @@
 {
   "$schema": "https://typedoc.org/schema.json",
   "entryPoints": ["src/index.ts"],
-  "out": "docs",
+  "plugin": ["typedoc-plugin-markdown"],
+  "outputs": [{ "name": "markdown", "path": "docs/api" }],
+  "entryFileName": "index",
   "name": "zero-auth API Documentation",
   "excludePrivate": true,
   "excludeProtected": false,
   "excludeInternal": true,
   "cleanOutputDir": true,
   "includeVersion": true,
-  "readme": "README.md",
+  "readme": "none",
   "githubPages": false
 }

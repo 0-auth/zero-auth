@@ -26,22 +26,37 @@ import type {
 export interface AuthInstance {
   // ── Token Methods ──────────────────────────────────────────────────────────
 
-  /** Generates a signed access token for the given payload. */
+  /**
+   * Generates a signed access token for the given payload.
+   * @example `const token = await auth.generateAccessToken({ id: "user-123" });`
+   */
   generateAccessToken(payload: JwtPayload): Promise<string>;
 
-  /** Generates a signed refresh token for the given payload. */
+  /**
+   * Generates a signed refresh token for the given payload.
+   * @example `const token = await auth.generateRefreshToken({ id: "user-123" });`
+   */
   generateRefreshToken(payload: JwtPayload): Promise<string>;
 
-  /** Generates a matched access + refresh token pair in parallel. */
+  /**
+   * Generates a matched access + refresh token pair in parallel.
+   * @example `const { accessToken, refreshToken } = await auth.generateTokenPair({ id: "user-123", role: "user" });`
+   */
   generateTokenPair(payload: JwtPayload): Promise<TokenPair>;
 
-  /** Verifies an access token and returns the decoded payload. */
+  /**
+   * Verifies an access token and returns the decoded payload.
+   * @throws `AuthError` when the token is missing, invalid, or expired.
+   */
   verifyToken(token: string): Promise<AuthUser>;
 
   /** Verifies a refresh token and returns the decoded payload. */
   verifyRefreshToken(token: string): Promise<AuthUser>;
 
-  /** Decodes a token without verifying the signature. */
+  /**
+   * Decodes a token without verifying the signature. Never use this method as
+   * authorization; use `verifyToken()` for trust decisions.
+   */
   decodeToken(token: string): AuthUser;
 
   // ── Middleware ─────────────────────────────────────────────────────────────
@@ -49,18 +64,21 @@ export interface AuthInstance {
   /**
    * Middleware: rejects unauthenticated requests with 401.
    * Attaches `req.user` on success.
+   * @example `app.get("/profile", auth.protect(), profileHandler);`
    */
   protect(): RequestHandler;
 
   /**
    * Middleware: enforces role-based access. Must run after `protect()`.
    * Rejects requests where `req.user.role` is not in `allowedRoles` with 403.
+   * @example `app.get("/admin", auth.protect(), auth.authorize(["admin"]), handler);`
    */
   authorize(allowedRoles: string[]): RequestHandler;
 
   /**
    * Middleware: optionally authenticates. Never rejects — populates `req.user`
    * if a valid token is present, otherwise continues as a guest.
+   * @example `app.get("/posts", auth.optional(), postsHandler);`
    */
   optional(): RequestHandler;
 
@@ -69,6 +87,7 @@ export interface AuthInstance {
   /**
    * Sets both the access and refresh token as HTTP-only cookies on the response,
    * and returns the tokens as JSON. Use after login/register.
+   * @example `const tokens = await auth.sendAuthTokens(res, { id: "user-123" });`
    */
   sendAuthTokens(res: Response, user: JwtPayload): Promise<TokenPair>;
 
@@ -82,6 +101,7 @@ export interface AuthInstance {
   /**
    * Express route handler for `POST /auth/refresh`.
    * Validates the refresh token and issues a new access token.
+   * @example `app.post("/auth/refresh", auth.refreshHandler());`
    */
   refreshHandler(): RequestHandler;
 
@@ -95,6 +115,7 @@ export interface AuthInstance {
   /**
    * Express error-handling middleware for AuthErrors.
    * Mount **after all routes** with `app.use(auth.errorHandler)`.
+   * @example `app.use(auth.errorHandler);`
    */
   errorHandler: ErrorRequestHandler;
 

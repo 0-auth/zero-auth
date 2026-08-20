@@ -54,7 +54,10 @@
     "format": "node node_modules/prettier/bin/prettier.cjs --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "format:check": "node node_modules/prettier/bin/prettier.cjs --check \"src/**/*.ts\" \"tests/**/*.ts\"",
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
-    "docs": "node node_modules/typedoc/bin/typedoc",
+    "docs": "npm run docs:build",
+    "docs:api": "node node_modules/typedoc/bin/typedoc",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "npm run docs:api && vitepress build docs",
     "prepublishOnly": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
@@ -82,7 +85,9 @@
     "supertest": "^7.0.0",
     "tsup": "^8.3.0",
     "typedoc": "^0.28.19",
+    "typedoc-plugin-markdown": "^4.12.0",
     "typescript": "^5.6.0",
+    "vitepress": "^1.6.4",
     "vitest": "^2.0.0"
   },
   "engines": {
