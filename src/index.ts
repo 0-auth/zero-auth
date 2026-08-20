@@ -1,6 +1,4 @@
-import type { RequestHandler } from "express";
-import type { ErrorRequestHandler } from "express";
-import type { Request, Response, NextFunction } from "express";
+import type { RequestHandler, ErrorRequestHandler, Response } from "express";
 
 import { createJwtEngine } from "./core/jwt.js";
 import { createProtectMiddleware } from "./middleware/protect.js";
@@ -95,12 +93,6 @@ export interface AuthInstance {
   // ── Express App Integration ────────────────────────────────────────────────
 
   /**
-   * App-level middleware: a no-op initializer for forward compatibility.
-   * Mount with `app.use(auth.initialize())`.
-   */
-  initialize(): RequestHandler;
-
-  /**
    * Express error-handling middleware for AuthErrors.
    * Mount **after all routes** with `app.use(auth.errorHandler)`.
    */
@@ -119,7 +111,7 @@ export interface AuthInstance {
  *
  * @example
  * ```ts
- * import { createAuth } from "@wtfdrshn/zero-auth";
+ * import { createAuth } from "@0-auth/zero-auth";
  *
  * const auth = createAuth({
  *   accessSecret: process.env.JWT_ACCESS_SECRET!,
@@ -127,8 +119,6 @@ export interface AuthInstance {
  *   accessExpiresIn: "15m",
  *   refreshExpiresIn: "7d",
  * });
- *
- * app.use(auth.initialize());
  *
  * app.get("/profile", auth.protect(), (req, res) => {
  *   res.json(req.user);
@@ -226,13 +216,6 @@ export function createAuth(config: AuthConfig): AuthInstance {
     },
 
     // ── App Integration ──────────────────────────────────────────────────────
-
-    initialize(): RequestHandler {
-      // v1: no-op initializer kept for API stability and forward compatibility.
-      return function zeroAuthInit(_req: Request, _res: Response, next: NextFunction): void {
-        next();
-      };
-    },
 
     errorHandler: authErrorHandler,
   };

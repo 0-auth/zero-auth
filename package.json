@@ -1,7 +1,7 @@
 {
-  "name": "@wtfdrshn/zero-auth",
-  "version": "1.0.0",
-  "description": "A lightweight, developer-first JWT authentication package for Node.js applications",
+  "name": "@0-auth/zero-auth",
+  "version": "1.0.1",
+  "description": "A lightweight, developer-first authentication layer for Node.js APIs — JWT, refresh-token rotation, HTTP-only cookies, and RBAC without an external auth platform",
   "author": "Darshan Kinge",
   "license": "MIT",
   "keywords": [

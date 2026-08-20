@@ -34,7 +34,6 @@ describe("Cookie-based rotation and reuse detection", () => {
 
     const app = express();
     app.use(express.json());
-    app.use(auth.initialize());
 
     app.post("/auth/login", async (_req, res) => {
       const tokens = await auth.sendAuthTokens(res, { id: "u-cookie", email: "c@example.com" });

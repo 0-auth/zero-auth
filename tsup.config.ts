@@ -13,8 +13,8 @@ export default defineConfig({
   outDir: "dist",
   banner: {
     js: `/**
- * zero-auth v1.0.0
- * A lightweight, developer-first JWT authentication package for Node.js
+ * zero-auth v1.0.1
+ * A lightweight, developer-first authentication layer for Node.js
  * MIT License
  */`,
   },

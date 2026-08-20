@@ -1,12 +1,11 @@
-# @wtfdrshn/zero-auth
+# @0-auth/zero-auth
 
-[![npm version](https://img.shields.io/npm/v/@wtfdrshn/zero-auth.svg)](https://www.npmjs.com/package/@wtfdrshn/zero-auth)
+[![npm version](https://img.shields.io/npm/v/@0-auth/zero-auth.svg)](https://www.npmjs.com/package/@0-auth/zero-auth)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org)
 
-> A lightweight, developer-first JWT authentication package for Node.js and Express.  
-> **JWT auth in under 5 minutes. Zero boilerplate.**
+> **A lightweight, developer-first authentication layer for Node.js APIs** — JWTs, refresh-token rotation, HTTP-only cookies, and RBAC without the complexity of an external auth platform.
 
 ---
 
@@ -49,11 +48,11 @@
 ## Installation
 
 ```bash
-npm install @wtfdrshn/zero-auth
+npm install @0-auth/zero-auth
 # or
-yarn add @wtfdrshn/zero-auth
+yarn add @0-auth/zero-auth
 # or
-pnpm add @wtfdrshn/zero-auth
+pnpm add @0-auth/zero-auth
 ```
 
 > **Note:** If using Express middleware, install `express` (peer dependency):
@@ -69,7 +68,7 @@ Here is a complete, copy-pasteable Express application using `zero-auth`:
 
 ```ts
 import express from "express";
-import { createAuth } from "@wtfdrshn/zero-auth";
+import { createAuth } from "@0-auth/zero-auth";
 
 // 1. Initialize Auth instance
 const auth = createAuth({
@@ -81,7 +80,6 @@ const auth = createAuth({
 
 const app = express();
 app.use(express.json());
-app.use(auth.initialize());
 
 // 2. Login Route (generates and sends token pair or cookies)
 app.post("/auth/login", async (req, res, next) => {
@@ -279,7 +277,7 @@ When `refreshOptions.rotate: true` is enabled, a new refresh token is issued on 
 
 ```ts
 import { createClient } from "redis";
-import { createAuth } from "@wtfdrshn/zero-auth";
+import { createAuth } from "@0-auth/zero-auth";
 
 const redis = createClient({ url: process.env.REDIS_URL });
 await redis.connect();
@@ -347,7 +345,7 @@ Default JSON error response format:
 ### Manual Error Handling
 
 ```ts
-import { isAuthError, AuthError, AUTH_ERROR_CODES } from "@wtfdrshn/zero-auth";
+import { isAuthError, AuthError, AUTH_ERROR_CODES } from "@0-auth/zero-auth";
 
 try {
   const payload = await auth.verifyToken(tokenString);
@@ -375,7 +373,7 @@ try {
 `zero-auth` automatically augments Express's `Request` type with `req.user`.
 
 ```ts
-import type { AuthUser } from "@wtfdrshn/zero-auth";
+import type { AuthUser } from "@0-auth/zero-auth";
 
 interface AuthUser {
   id: string;
@@ -430,7 +428,6 @@ Created via `const auth = createAuth(config)`:
 | `clearAuth(res)` | `void` | Clears access and refresh auth cookies from `res`. |
 | `refreshHandler()` | `RequestHandler` | Express route handler for refreshing access tokens. |
 | `rotateTokens(payload)` | `Promise<TokenPair>` | Generates a new access + refresh pair (for custom rotation logic). |
-| `initialize()` | `RequestHandler` | App-level initialization middleware (`app.use(auth.initialize())`). |
 | `errorHandler` | `ErrorRequestHandler` | Express error middleware for handling `AuthError` responses. |
 
 ---
@@ -462,7 +459,7 @@ import {
   
   // In-Memory Revocation (Testing / Dev)
   createInMemoryRevocationStore,
-} from "@wtfdrshn/zero-auth";
+} from "@0-auth/zero-auth";
 ```
 
 | Utility | Description |
