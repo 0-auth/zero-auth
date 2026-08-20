@@ -2,7 +2,7 @@
   "name": "@wtfdrshn/zero-auth",
   "version": "1.0.0",
   "description": "A lightweight, developer-first JWT authentication package for Node.js applications",
-  "author": "",
+  "author": "Darshan",
   "license": "MIT",
   "keywords": [
     "jwt",
@@ -15,13 +15,13 @@
     "cookie",
     "rbac"
   ],
-  "homepage": "https://github.com/darshan-kinge/zero-auth#readme",
+  "homepage": "https://github.com/0-auth/zero-auth#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/darshan-kinge/zero-auth.git"
+    "url": "git+https://github.com/0-auth/zero-auth.git"
   },
   "bugs": {
-    "url": "https://github.com/darshan-kinge/zero-auth/issues"
+    "url": "https://github.com/0-auth/zero-auth/issues"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
