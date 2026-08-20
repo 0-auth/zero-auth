@@ -119,7 +119,7 @@ export interface AuthInstance {
  *
  * @example
  * ```ts
- * import { createAuth } from "@0-auth/zero-auth";
+ * import { createAuth } from "@wtfdrshn/zero-auth";
  *
  * const auth = createAuth({
  *   accessSecret: process.env.JWT_ACCESS_SECRET!,
