@@ -7,8 +7,9 @@ import {
   withFamilyId,
 } from "../../src/utils/helpers.js";
 import { signToken } from "../../src/core/sign.js";
+import { createAuth } from "../../src/index.js";
 import { AuthError } from "../../src/errors/authErrors.js";
-import type { AuthUser } from "../../src/types/auth.js";
+import type { AuthUser, AuthConfig } from "../../src/types/auth.js";
 
 const SECRET = "test-secret-that-is-at-least-32-characters-long";
 
@@ -167,5 +168,83 @@ describe("withFamilyId", () => {
   it("preserves an existing fid", () => {
     const result = withFamilyId({ id: "u1", fid: "family-1" }, true);
     expect(result["fid"]).toBe("family-1");
+  });
+});
+
+describe("resolveConfig & validation", () => {
+  const originalEnv = process.env["NODE_ENV"];
+
+  it("throws when accessSecret or refreshSecret is missing", () => {
+    expect(() => createAuth({ accessSecret: "", refreshSecret: "valid-32-chars-long-refresh-secret!" } as unknown as AuthConfig)).toThrowError(
+      "[zero-auth] `accessSecret` is required."
+    );
+    expect(() => createAuth({ accessSecret: "valid-32-chars-long-access-secret!", refreshSecret: "" } as unknown as AuthConfig)).toThrowError(
+      "[zero-auth] `refreshSecret` is required."
+    );
+  });
+
+  it("enforces 32-char secrets and distinct secrets in production", () => {
+    process.env["NODE_ENV"] = "production";
+    try {
+      expect(() =>
+        createAuth({
+          accessSecret: "short",
+          refreshSecret: "valid-32-chars-long-refresh-secret!",
+        })
+      ).toThrowError("[zero-auth] `accessSecret` should be at least 32 characters for security.");
+
+      expect(() =>
+        createAuth({
+          accessSecret: "valid-32-chars-long-access-secret!",
+          refreshSecret: "short",
+        })
+      ).toThrowError("[zero-auth] `refreshSecret` should be at least 32 characters for security.");
+
+      expect(() =>
+        createAuth({
+          accessSecret: "identical-secret-key-32-chars-long!",
+          refreshSecret: "identical-secret-key-32-chars-long!",
+        })
+      ).toThrowError("[zero-auth] `accessSecret` and `refreshSecret` should be different values.");
+    } finally {
+      process.env["NODE_ENV"] = originalEnv;
+    }
+  });
+
+  it("enforces revocation hooks when rotate: true in production", () => {
+    process.env["NODE_ENV"] = "production";
+    try {
+      expect(() =>
+        createAuth({
+          accessSecret: "valid-32-chars-long-access-secret!",
+          refreshSecret: "valid-32-chars-long-refresh-secret!",
+          refreshOptions: {
+            rotate: true,
+          },
+        })
+      ).toThrowError("[zero-auth] refreshOptions.rotate requires isRevoked and revokeRefreshToken");
+    } finally {
+      process.env["NODE_ENV"] = originalEnv;
+    }
+  });
+
+  it("enforces secure: true when sameSite is 'none' in production", () => {
+    process.env["NODE_ENV"] = "production";
+    try {
+      expect(() =>
+        createAuth({
+          accessSecret: "valid-32-chars-long-access-secret!",
+          refreshSecret: "valid-32-chars-long-refresh-secret!",
+          cookies: {
+            options: {
+              sameSite: "none",
+              secure: false,
+            },
+          },
+        })
+      ).toThrowError("[zero-auth] Cookie option `sameSite: 'none'` requires `secure: true`");
+    } finally {
+      process.env["NODE_ENV"] = originalEnv;
+    }
   });
 });

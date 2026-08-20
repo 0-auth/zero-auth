@@ -221,4 +221,28 @@ describe("Refresh rotation", () => {
     const r2Replay = await request(app).post("/auth/refresh").send({ refreshToken: r2 });
     expect(r2Replay.status).toBe(401);
   });
+
+  it("handles inMemoryRevocationStore TTL expiration and sizing correctly", async () => {
+    // Store with 0.05 second TTL
+    const shortTtlStore = createInMemoryRevocationStore(0.05);
+
+    await shortTtlStore.revoke("jti-1", "family-1");
+    await shortTtlStore.register("jti-2", "family-1");
+
+    expect(shortTtlStore._size()).toBe(1);
+    expect(shortTtlStore._familySize("family-1")).toBe(2);
+    expect(shortTtlStore._familySize("non-existent")).toBe(0);
+
+    expect(await shortTtlStore.isRevoked("jti-1")).toBe(true);
+    expect(await shortTtlStore.isRevoked("unknown-jti")).toBe(false);
+
+    // Revoke unknown family without throwing
+    await shortTtlStore.revokeFamily("unknown-family");
+
+    // Wait for TTL to expire
+    await new Promise((r) => setTimeout(r, 80));
+
+    // After expiration, isRevoked cleans up map and returns false
+    expect(await shortTtlStore.isRevoked("jti-1")).toBe(false);
+  });
 });

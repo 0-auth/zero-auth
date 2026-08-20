@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Request, Response, NextFunction } from "express";
 import { createProtectMiddleware } from "../../src/middleware/protect.js";
-import { createJwtEngine } from "../../src/core/jwt.js";
+import { createJwtEngine, type JwtEngine } from "../../src/core/jwt.js";
 import { resolveConfig } from "../../src/utils/helpers.js";
 import { AuthError } from "../../src/errors/authErrors.js";
 import { signToken } from "../../src/core/sign.js";
@@ -115,5 +115,24 @@ describe("protect middleware", () => {
     await vi.waitFor(() => expect(next).toHaveBeenCalledOnce());
 
     expect((req as Request & { user?: { id: string } }).user?.id).toBe("header-user");
+  });
+
+  it("handles unexpected non-AuthError exceptions gracefully with AUTH_TOKEN_INVALID", async () => {
+    const mockEngine = {
+      ...engine,
+      verifyAccessToken: vi.fn().mockRejectedValue(new Error("Unexpected crash")),
+    };
+    const mockProtect = createProtectMiddleware(mockEngine as unknown as JwtEngine, config);
+
+    const req = makeReq({
+      headers: { authorization: "Bearer some-token" },
+    });
+
+    mockProtect(req, makeRes(), next as NextFunction);
+    await vi.waitFor(() => expect(next).toHaveBeenCalledOnce());
+
+    const arg = next.mock.calls[0]?.[0] as AuthError;
+    expect(arg).toBeInstanceOf(AuthError);
+    expect(arg.code).toBe("AUTH_TOKEN_INVALID");
   });
 });
