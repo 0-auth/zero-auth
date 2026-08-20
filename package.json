@@ -15,13 +15,13 @@
     "cookie",
     "rbac"
   ],
-  "homepage": "https://github.com/0-auth/zero-auth#readme",
+  "homepage": "https://github.com/darshan-kinge/zero-auth#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/0-auth/zero-auth.git"
+    "url": "git+https://github.com/darshan-kinge/zero-auth.git"
   },
   "bugs": {
-    "url": "https://github.com/0-auth/zero-auth/issues"
+    "url": "https://github.com/darshan-kinge/zero-auth/issues"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
