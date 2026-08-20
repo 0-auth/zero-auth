@@ -5,7 +5,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 3
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
     labels:
       - "dependencies"
 
@@ -14,5 +18,10 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 1
+    groups:
+      github-actions:
+        patterns:
+          - "*"
     labels:
       - "ci"
