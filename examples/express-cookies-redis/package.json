@@ -1,0 +1,22 @@
+{
+  "name": "zero-auth-cookies-redis-example",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cookie-based auth with Redis-backed refresh token rotation using @0-auth/zero-auth",
+  "type": "module",
+  "scripts": {
+    "start": "npx tsx src/server.ts",
+    "dev": "npx tsx --watch src/server.ts"
+  },
+  "dependencies": {
+    "@0-auth/zero-auth": "latest",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.2",
+    "ioredis": "^5.4.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,0 +1,154 @@
+# Express Cookie Auth + Redis Rotation Example
+
+HTTP-only cookie authentication with refresh token rotation backed by Redis.
+When a rotated refresh token is replayed (e.g. stolen), the entire token family
+is revoked — forcing re-login.
+
+## Prerequisites
+
+- **Docker** (for Redis) or a Redis instance running on `localhost:6379`
+- **Node.js 18+**
+
+## Setup
+
+```bash
+# 1. Start Redis
+cd examples/express-cookies-redis
+docker compose up -d
+
+# 2. Create .env from template
+cp .env.example .env
+
+# 3. Install dependencies
+npm install
+
+# 4. Start the server
+npm start
+```
+
+Server starts on **http://localhost:3001**.
+
+## Seed Users
+
+| Email                | Password   | Role  |
+| -------------------- | ---------- | ----- |
+| admin@example.com    | admin123   | admin |
+| user@example.com     | user123    | user  |
+
+---
+
+## API Walkthrough
+
+### 1. Login (sets cookies)
+
+```bash
+curl -X POST http://localhost:3001/auth/login \
+  -H "Content-Type: application/json" \
+  -c cookies.txt \
+  -d '{"email":"admin@example.com","password":"admin123"}'
+```
+
+Check `cookies.txt` — you'll see `access_token` and `refresh_token` cookies.
+
+### 2. Access Protected Route (via cookies)
+
+```bash
+curl http://localhost:3001/profile -b cookies.txt
+```
+
+**Response** `200`:
+```json
+{
+  "user": { "id": "1", "email": "admin@example.com", "role": "admin", ... }
+}
+```
+
+### 3. Refresh Token (rotation)
+
+```bash
+curl -X POST http://localhost:3001/auth/refresh \
+  -b cookies.txt -c cookies.txt
+```
+
+This rotates the refresh token — the old one is revoked in Redis and new
+cookies are set. Check `cookies.txt` to see the updated values.
+
+### 4. Replay the Old Refresh Token (reuse detection)
+
+If you saved the old `cookies.txt` before step 3 and replay it:
+
+```bash
+curl -X POST http://localhost:3001/auth/refresh \
+  -b old-cookies.txt -c old-cookies.txt
+```
+
+**Result**: `401` — the server detects reuse, logs a warning, and revokes the
+**entire token family**. Even the new refresh token from step 3 is now invalid.
+
+### 5. Logout (clears cookies)
+
+```bash
+curl -X POST http://localhost:3001/auth/logout -b cookies.txt -c cookies.txt
+```
+
+**Response** `200`:
+```json
+{ "message": "Logged out" }
+```
+
+### 6. Optional Auth
+
+```bash
+# As guest
+curl http://localhost:3001/posts
+
+# As authenticated user
+curl http://localhost:3001/posts -b cookies.txt
+```
+
+### 7. Admin-Only: Delete User
+
+```bash
+curl -X DELETE http://localhost:3001/admin/users/2 -b cookies.txt
+```
+
+---
+
+## Architecture
+
+```
+┌──────────┐    cookies     ┌──────────────┐    revoke/check    ┌─────────┐
+│  Client  │ ◄────────────► │  Express +   │ ◄────────────────► │  Redis  │
+│ (browser)│                │  zero-auth   │                    │         │
+└──────────┘                └──────────────┘                    └─────────┘
+                                   │
+                            ┌──────┴──────┐
+                            │  store.ts   │
+                            │  Redis ops  │
+                            └─────────────┘
+```
+
+## Features Demonstrated
+
+| Feature                      | Where                                          |
+| ---------------------------- | ---------------------------------------------- |
+| `createAuth()` + cookies     | Auth initialization with cookie config          |
+| `sendAuthTokens(res, user)`  | Register & Login (sets HTTP-only cookies)        |
+| `clearAuth(res)`             | Logout (clears cookies)                         |
+| `refreshHandler()` + rotate  | `POST /auth/refresh` (rotation + new cookies)   |
+| `revokeRefreshToken` hook    | Redis-backed revocation before issuing new pair  |
+| `registerRefreshToken` hook  | Tracks new jti under family in Redis            |
+| `isRevoked` hook             | Checks Redis before accepting refresh token      |
+| `onRefreshReuse` hook        | Revokes entire family on replay detection        |
+| `protect()`                  | `GET /profile`, `DELETE /admin/users/:id`       |
+| `authorize(["admin"])`       | `DELETE /admin/users/:id`                       |
+| `optional()`                 | `GET /posts`                                    |
+| `errorHandler`               | Mounted at app level                            |
+
+## Stopping
+
+```bash
+# Stop the server (Ctrl+C)
+# Stop Redis
+docker compose down
+```

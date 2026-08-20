@@ -1,0 +1,20 @@
+{
+  "name": "zero-auth-rest-api-example",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Stateless Bearer token REST API example using @0-auth/zero-auth",
+  "type": "module",
+  "scripts": {
+    "start": "npx tsx src/server.ts",
+    "dev": "npx tsx --watch src/server.ts"
+  },
+  "dependencies": {
+    "@0-auth/zero-auth": "latest",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -14,6 +14,7 @@
 - [Features](#features)
 - [Installation](#installation)
 - [Quick Start (5 Minutes)](#quick-start-5-minutes)
+- [Examples](#examples)
 - [Configuration Options](#configuration-options)
 - [Usage Guides](#usage-guides)
   - [1. Header / Bearer Token Auth](#1-header--bearer-token-auth)
@@ -122,6 +123,26 @@ app.post("/auth/logout", (req, res) => {
 app.use(auth.errorHandler);
 
 app.listen(3000, () => console.log("Server running on http://localhost:3000"));
+```
+
+---
+
+## Examples
+
+Two complete, runnable example projects are included in the [`examples/`](./examples) directory:
+
+| Example | Description | Features |
+| ------- | ----------- | -------- |
+| [`express-rest-api`](./examples/express-rest-api) | Stateless Bearer token API for mobile / CLI / SPA clients | `generateTokenPair`, `protect`, `authorize`, `optional`, `refreshHandler`, `decodeToken` |
+| [`express-cookies-redis`](./examples/express-cookies-redis) | Cookie-based auth with Redis-backed refresh token rotation | `sendAuthTokens`, `clearAuth`, rotation hooks, family revocation, `onRefreshReuse` |
+
+Each example includes a README with setup instructions and cURL commands for every endpoint.
+
+```bash
+# Quick start (REST API example)
+cd examples/express-rest-api
+npm install
+npm start
 ```
 
 ---
