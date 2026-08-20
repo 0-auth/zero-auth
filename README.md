@@ -1,6 +1,6 @@
-# zero-auth
+# @0-auth/zero-auth
 
-[![npm version](https://img.shields.io/npm/v/zero-auth.svg)](https://www.npmjs.com/package/zero-auth)
+[![npm version](https://img.shields.io/npm/v/@0-auth/zero-auth.svg)](https://www.npmjs.com/package/@0-auth/zero-auth)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org)
@@ -49,11 +49,11 @@
 ## Installation
 
 ```bash
-npm install zero-auth
+npm install @0-auth/zero-auth
 # or
-yarn add zero-auth
+yarn add @0-auth/zero-auth
 # or
-pnpm add zero-auth
+pnpm add @0-auth/zero-auth
 ```
 
 > **Note:** If using Express middleware, install `express` (peer dependency):
@@ -69,7 +69,7 @@ Here is a complete, copy-pasteable Express application using `zero-auth`:
 
 ```ts
 import express from "express";
-import { createAuth } from "zero-auth";
+import { createAuth } from "@0-auth/zero-auth";
 
 // 1. Initialize Auth instance
 const auth = createAuth({
@@ -279,7 +279,7 @@ When `refreshOptions.rotate: true` is enabled, a new refresh token is issued on 
 
 ```ts
 import { createClient } from "redis";
-import { createAuth } from "zero-auth";
+import { createAuth } from "@0-auth/zero-auth";
 
 const redis = createClient({ url: process.env.REDIS_URL });
 await redis.connect();
@@ -347,7 +347,7 @@ Default JSON error response format:
 ### Manual Error Handling
 
 ```ts
-import { isAuthError, AuthError, AUTH_ERROR_CODES } from "zero-auth";
+import { isAuthError, AuthError, AUTH_ERROR_CODES } from "@0-auth/zero-auth";
 
 try {
   const payload = await auth.verifyToken(tokenString);
@@ -375,7 +375,7 @@ try {
 `zero-auth` automatically augments Express's `Request` type with `req.user`.
 
 ```ts
-import type { AuthUser } from "zero-auth";
+import type { AuthUser } from "@0-auth/zero-auth";
 
 interface AuthUser {
   id: string;
@@ -462,7 +462,7 @@ import {
   
   // In-Memory Revocation (Testing / Dev)
   createInMemoryRevocationStore,
-} from "zero-auth";
+} from "@0-auth/zero-auth";
 ```
 
 | Utility | Description |
