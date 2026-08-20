@@ -1,0 +1,13 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts"],
+  "out": "docs",
+  "name": "zero-auth API Documentation",
+  "excludePrivate": true,
+  "excludeProtected": false,
+  "excludeInternal": true,
+  "cleanOutputDir": true,
+  "includeVersion": true,
+  "readme": "README.md",
+  "githubPages": false
+}
