@@ -1,0 +1,129 @@
+:root {
+  --vp-c-brand-1: #5b5bd6;
+  --vp-c-brand-2: #7474e8;
+  --vp-c-brand-3: #4747b8;
+  --vp-c-brand-soft: rgba(91, 91, 214, 0.14);
+  --vp-c-bg: #fbfbfd;
+  --vp-c-bg-soft: #f1f2f8;
+  --vp-c-bg-mute: #e9ebf3;
+  --vp-font-family-base: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.dark {
+  --vp-c-brand-1: #9b9bff;
+  --vp-c-brand-2: #b0b0ff;
+  --vp-c-brand-3: #7c7ce8;
+  --vp-c-brand-soft: rgba(155, 155, 255, 0.16);
+  --vp-c-bg: #101116;
+  --vp-c-bg-soft: #171820;
+  --vp-c-bg-mute: #20222d;
+}
+
+.VPHero .name {
+  letter-spacing: -0.045em;
+}
+
+.VPHero .text {
+  max-width: 760px;
+  letter-spacing: -0.04em;
+}
+
+.VPHero .tagline {
+  max-width: 650px;
+}
+
+.VPFeatures .VPFeature {
+  border: 1px solid var(--vp-c-divider);
+  background: var(--vp-c-bg-soft);
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+
+.VPFeatures .VPFeature:hover {
+  border-color: var(--vp-c-brand-1);
+  transform: translateY(-2px);
+}
+
+.home-intro {
+  max-width: 760px;
+  margin: 72px auto 28px;
+  text-align: center;
+}
+
+.home-intro .eyebrow,
+.home-card-kicker {
+  color: var(--vp-c-brand-1);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.home-intro h2 {
+  margin: 12px 0;
+  color: var(--vp-c-text-1);
+  font-size: clamp(28px, 4vw, 44px);
+  letter-spacing: -0.04em;
+}
+
+.home-intro p:last-child {
+  margin: auto;
+  color: var(--vp-c-text-2);
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  max-width: 1056px;
+  margin: 0 auto 72px;
+}
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 150px;
+  padding: 22px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 14px;
+  color: inherit;
+  text-decoration: none;
+  background: var(--vp-c-bg-soft);
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+
+.home-card:hover {
+  border-color: var(--vp-c-brand-1);
+  transform: translateY(-2px);
+}
+
+.home-card strong {
+  color: var(--vp-c-text-1);
+  font-size: 20px;
+}
+
+.home-card span:last-child {
+  color: var(--vp-c-text-2);
+  line-height: 1.5;
+}
+
+.home-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: 26px 0 72px;
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .home-grid {
+    grid-template-columns: 1fr;
+    margin-bottom: 48px;
+  }
+
+  .home-intro {
+    margin-top: 52px;
+  }
+}

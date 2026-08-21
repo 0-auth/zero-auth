@@ -57,6 +57,7 @@
     "docs": "npm run docs:build",
     "docs:api": "node node_modules/typedoc/bin/typedoc",
     "docs:dev": "vitepress dev docs",
+    "docs:preview": "vitepress preview docs",
     "docs:build": "npm run docs:api && vitepress build docs",
     "prepublishOnly": "npm run lint && npm run typecheck && npm run test && npm run build"
   },

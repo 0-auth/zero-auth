@@ -1,5 +1,36 @@
 # Deployment
 
+## Cloudflare Pages
+
+Cloudflare Pages can build this repository directly from GitHub.
+
+Create a Pages project connected to the repository with these settings:
+
+| Setting | Value |
+| --- | --- |
+| Production branch | `master` |
+| Build command | `npm run docs:build` |
+| Output directory | `docs/.vitepress/dist` |
+| Node.js version | `20` or newer |
+| Environment variable | `DOCS_BASE=/v1/` |
+
+After the first deployment, the versioned docs are available at:
+
+```text
+https://<your-project>.pages.dev/v1/
+```
+
+For a custom domain, add it under **Workers & Pages → your project → Custom
+domains**. Keep `DOCS_BASE=/v1/` if the docs should remain versioned; use
+`DOCS_BASE=/` only when the docs should load at the domain root.
+
+Preview locally with the production build:
+
+```bash
+npm run docs:build
+npm run docs:preview
+```
+
 ## Production checklist
 
 - Set separate, random secrets for access and refresh tokens.
