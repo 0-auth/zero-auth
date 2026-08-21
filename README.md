@@ -1,17 +1,31 @@
 # @0-auth/zero-auth
 
+Minimal JWT authentication for Node.js and Express APIs.
+
+No database. No hosted auth service. Just access tokens, refresh-token rotation,
+HTTP-only cookies, and RBAC with middleware your team can understand.
+
+**Start here:** [5-minute quick start](#quick-start-5-minutes) · [runnable examples](#examples) · [API reference](#api-reference)
+
+**Documentation:** [zero-auth.netlify.app](https://zero-auth.netlify.app/)
+
 [![npm version](https://img.shields.io/npm/v/@0-auth/zero-auth.svg)](https://www.npmjs.com/package/@0-auth/zero-auth)
+[![npm downloads](https://img.shields.io/npm/dm/@0-auth/zero-auth.svg)](https://www.npmjs.com/package/@0-auth/zero-auth)
+[![CI](https://github.com/0-auth/zero-auth/actions/workflows/ci.yml/badge.svg)](https://github.com/0-auth/zero-auth/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org)
 
-> **A lightweight, developer-first authentication layer for Node.js APIs** — JWTs, refresh-token rotation, HTTP-only cookies, and RBAC without the complexity of an external auth platform.
+> **JWT auth with refresh-token rotation and reuse detection** for teams that
+> want to keep identity and storage in their own application.
 
 ---
 
 ## Table of Contents
 
 - [Features](#features)
+- [Scope](#scope)
+- [Security model](#security-model)
 - [Installation](#installation)
 - [Quick Start (5 Minutes)](#quick-start-5-minutes)
 - [Examples](#examples)
@@ -29,6 +43,7 @@
   - [Standalone Utilities](#standalone-utilities)
 - [Production & Security Best Practices](#production--security-best-practices)
 - [Compatibility](#compatibility)
+- [Contributing](#contributing)
 - [License](#license)
 
 ---
@@ -43,6 +58,30 @@
 - 🧩 **First-Class TypeScript**: Automatic `req.user` typing via declaration merging with support for custom claims.
 - 🛑 **Structured Error Handling**: Standardized `AuthError` class with typed error codes (`AUTH_TOKEN_EXPIRED`, `AUTH_FORBIDDEN`, etc.).
 - 🌐 **Modern & Edge-Ready**: Dual ESM & CommonJS builds, Node 18+, Bun, serverless, and edge runtime compatible.
+
+---
+
+## Scope
+
+`zero-auth` is an authentication layer, not a complete identity platform. It
+does not provide a user database, password hashing, OAuth providers, email
+verification, password reset, MFA, or user-management UI. Your application
+owns those decisions and supplies the user identity used in token claims.
+
+---
+
+## Security model
+
+| Concern | Default approach |
+| --- | --- |
+| Access tokens | Short-lived JWTs, typically `15m` |
+| Refresh tokens | Longer-lived tokens, typically `7d` |
+| Rotation | Enable `refreshOptions.rotate` when replay detection matters |
+| Revocation | Your Redis, database, or other application store |
+| Browser storage | HTTP-only cookies when a cookie flow is appropriate |
+
+`zero-auth` does not choose or manage your user database. Read the full
+[security checklist](./docs/security.md) before deploying to production.
 
 ---
 
@@ -67,14 +106,17 @@ pnpm add @0-auth/zero-auth
 
 Here is a complete, copy-pasteable Express application using `zero-auth`:
 
+Set `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` to different random values of
+at least 32 characters before starting the app.
+
 ```ts
 import express from "express";
 import { createAuth } from "@0-auth/zero-auth";
 
 // 1. Initialize Auth instance
 const auth = createAuth({
-  accessSecret: process.env.JWT_ACCESS_SECRET || "your-at-least-32-character-access-secret-key",
-  refreshSecret: process.env.JWT_REFRESH_SECRET || "your-at-least-32-character-refresh-secret-key",
+  accessSecret: process.env.JWT_ACCESS_SECRET!,
+  refreshSecret: process.env.JWT_REFRESH_SECRET!,
   accessExpiresIn: "15m",
   refreshExpiresIn: "7d",
 });
@@ -525,6 +567,13 @@ import {
 | **Bun** | >= 1.0.0 | Native runtime support |
 | **TypeScript** | >= 5.0.0 | Declarations bundled |
 | **Serverless / Edge** | ✅ | Powered by `jose` (Web Crypto API compliant) |
+
+---
+
+## Contributing
+
+Found a bug or have an idea? [Open an issue](https://github.com/0-auth/zero-auth/issues)
+or read the [contribution guide](./CONTRIBUTING.md).
 
 ---
 

@@ -1,21 +1,30 @@
 {
   "name": "@0-auth/zero-auth",
-  "version": "1.0.1",
-  "description": "A lightweight, developer-first authentication layer for Node.js APIs — JWT, refresh-token rotation, HTTP-only cookies, and RBAC without an external auth platform",
+  "version": "1.0.2",
+  "description": "Minimal JWT authentication for Node.js and Express APIs with refresh-token rotation, HTTP-only cookies, and RBAC",
   "author": "Darshan Kinge",
   "license": "MIT",
   "keywords": [
     "jwt",
+    "jwt-auth",
+    "jwt-authentication",
+    "access-token",
     "authentication",
     "authorization",
+    "api",
     "middleware",
     "express",
+    "express-authentication",
+    "nodejs",
     "typescript",
     "refresh-token",
+    "refresh-token-rotation",
+    "token-revocation",
     "cookie",
+    "http-only-cookie",
     "rbac"
   ],
-  "homepage": "https://github.com/0-auth/zero-auth#readme",
+  "homepage": "https://zero-auth.netlify.app/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/0-auth/zero-auth.git"

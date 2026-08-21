@@ -4,6 +4,21 @@ export default defineConfig({
   base: process.env.DOCS_BASE ?? "/v1/",
   title: "zero-auth",
   description: "Developer-first authentication for Node.js APIs",
+  sitemap: process.env.DOCS_SITE_URL
+    ? { hostname: process.env.DOCS_SITE_URL }
+    : undefined,
+  transformHead({ pageData }) {
+    const siteUrl = process.env.DOCS_SITE_URL;
+    if (!siteUrl) return [];
+
+    const pagePath = pageData.relativePath
+      .replace(/\.md$/, "")
+      .replace(/index$/, "");
+    const base = process.env.DOCS_BASE ?? "/v1/";
+    const canonical = new URL(`${base}${pagePath}`, siteUrl).toString();
+
+    return [["link", { rel: "canonical", href: canonical }]];
+  },
   themeConfig: {
     nav: [
       { text: "v1", link: "/" },
@@ -19,7 +34,6 @@ export default defineConfig({
             { text: "Overview", link: "/" },
             { text: "Quick start", link: "/quick-start" },
             { text: "Runnable REST example", link: "/examples/rest-api" },
-            { text: "Authentication flows", link: "/flows" },
           ],
         },
         {

@@ -96,4 +96,4 @@ A token belonging to the regular user receives `403 AUTH_FORBIDDEN` for that
 route.
 
 See the complete source and additional endpoints in
-[`examples/express-rest-api`](https://github.com/0-auth/zero-auth/tree/main/examples/express-rest-api).
+[`examples/express-rest-api`](https://github.com/0-auth/zero-auth/tree/master/examples/express-rest-api).

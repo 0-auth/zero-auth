@@ -1,36 +1,6 @@
 # Deployment
 
-## Netlify
-
-Netlify can build this repository directly from GitHub. The included
-`netlify.toml` keeps the docs versioned under `/v1/` and redirects `/` there.
-
-Create a Netlify site connected to the repository with these settings:
-
-| Setting | Value |
-| --- | --- |
-| Production branch | `master` |
-| Build command | `npm run docs:build:versioned` |
-| Output directory | `docs/.vitepress/dist` |
-| Node.js version | `22` |
-| Environment variable | `DOCS_BASE=/v1/` |
-
-After the first deployment, the versioned docs are available at:
-
-```text
-https://<your-site>.netlify.app/v1/
-```
-
-For a custom domain, add it under **Domain management → Add a domain**. Keep
-`DOCS_BASE=/v1/` if the docs should remain versioned; use `DOCS_BASE=/` only
-when the docs should load at the domain root.
-
-Preview locally with the production build:
-
-```bash
-npm run docs:build
-npm run docs:preview
-```
+This guide covers production settings for applications using `zero-auth`.
 
 ## Production checklist
 
@@ -43,7 +13,7 @@ npm run docs:preview
 
 ## Environment variables
 
-Keep secrets outside the repository. A typical deployment has:
+Keep secrets outside the repository:
 
 ```bash
 NODE_ENV=production
@@ -66,14 +36,11 @@ protected environment settings.
 ## Express behind a reverse proxy
 
 If TLS terminates at a reverse proxy or load balancer, configure Express to
-trust the proxy according to your infrastructure:
+trust only the proxy hops that you control:
 
 ```ts
 app.set("trust proxy", 1);
 ```
-
-This helps Express correctly understand secure forwarded requests. Only trust
-proxy hops that you control.
 
 ## HTTP-only cookies
 
@@ -94,42 +61,9 @@ const auth = createAuth({
 });
 ```
 
-If a browser frontend calls a different origin, configure CORS and send
-credentials on the client request. Choose `sameSite: "none"` only when the
-cross-site flow requires it, and keep `secure: true`.
-
-## Docker
-
-Build the package and run the API in a small Node image:
-
-```dockerfile
-FROM node:20-slim
-WORKDIR /app
-
-COPY package*.json ./
-RUN npm ci --omit=dev
-
-COPY dist ./dist
-COPY server ./server
-
-ENV NODE_ENV=production
-EXPOSE 3000
-CMD ["node", "server/index.js"]
-```
-
-Build the library before building the image:
-
-```bash
-npm run build
-docker build -t my-api .
-docker run --rm -p 3000:3000 \
-  -e JWT_ACCESS_SECRET="$JWT_ACCESS_SECRET" \
-  -e JWT_REFRESH_SECRET="$JWT_REFRESH_SECRET" \
-  my-api
-```
-
-Adapt the `server` path to your API entry point. Do not copy `.env` files into
-the image.
+For a browser frontend on another origin, configure CORS and send credentials.
+Use `sameSite: "none"` only when the cross-site flow requires it, together
+with `secure: true`.
 
 ## Multiple instances
 
@@ -137,11 +71,5 @@ Access-token verification is stateless. Refresh-token rotation is not: the
 callbacks in `refreshOptions` need a shared store such as Redis or a database
 when requests can reach different instances.
 
-The in-memory revocation store is suitable for local development and single
-process tests, not for a horizontally scaled production deployment.
-
-## Serverless
-
-Create the auth instance outside the request handler so warm invocations can
-reuse it. Store refresh-token revocation data externally; function memory can
-be discarded between invocations.
+The in-memory revocation store is suitable for local development and single-
+process tests, not for horizontally scaled production deployments.

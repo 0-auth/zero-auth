@@ -1,0 +1,23 @@
+# zero-auth
+
+> Developer-first authentication for Node.js APIs with JWTs, refresh-token rotation, HTTP-only cookies, and RBAC.
+
+## Documentation
+
+- [Overview](/v1/)
+- [Quick start](/v1/quick-start)
+- [Bearer tokens](/v1/guides/bearer-tokens)
+- [HTTP-only cookies](/v1/guides/cookies)
+- [Refresh-token rotation](/v1/guides/refresh-rotation)
+- [Access control and RBAC](/v1/guides/access-control)
+- [Configuration](/v1/configuration)
+- [Security checklist](/v1/security)
+- [Error reference](/v1/errors)
+- [Runnable REST example](/v1/examples/rest-api)
+- [API reference](/v1/api/)
+- [Versioning and migrations](/v1/versioning)
+
+## Project
+
+- [npm package](https://www.npmjs.com/package/@0-auth/zero-auth)
+- [GitHub repository](https://github.com/0-auth/zero-auth)
