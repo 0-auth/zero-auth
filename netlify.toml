@@ -1,0 +1,12 @@
+[build]
+  command = "npm run docs:build:versioned"
+  publish = "docs/.vitepress/dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  DOCS_BASE = "/v1/"
+
+[[redirects]]
+  from = "/"
+  to = "/v1/"
+  status = 301
