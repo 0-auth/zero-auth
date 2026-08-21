@@ -226,11 +226,16 @@ app.delete(
 
 app.use(auth.errorHandler);
 
+// ── Export for testing ────────────────────────────────────────────────────────
+
+export { app, auth, store, redis };
+
 // ── Start Server ─────────────────────────────────────────────────────────────
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`
+if (process.env["NODE_ENV"] !== "test") {
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => {
+    console.log(`
 ┌──────────────────────────────────────────────────────────────┐
 │  @0-auth/zero-auth — Cookie + Redis Rotation Example         │
 │  Server running on http://localhost:${PORT}                      │
@@ -250,5 +255,6 @@ app.listen(PORT, () => {
 │        -d '{"email":"admin@example.com",                     │
 │             "password":"admin123"}'                           │
 └──────────────────────────────────────────────────────────────┘
-  `);
-});
+    `);
+  });
+}
