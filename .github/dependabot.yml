@@ -10,6 +10,22 @@ updates:
       npm-dependencies:
         patterns:
           - "*"
+    ignore:
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "vitest"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "@vitest/coverage-v8"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "eslint"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "jose"
+        update-types:
+          - "version-update:semver-major"
     labels:
       - "dependencies"
 
