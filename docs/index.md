@@ -35,17 +35,17 @@ features:
 </div>
 
 <div class="home-grid">
-  <a class="home-card" href="/guides/bearer-tokens.html">
+  <a class="home-card" href="./guides/bearer-tokens">
     <span class="home-card-kicker">For APIs</span>
     <strong>Bearer tokens</strong>
     <span>For mobile apps, CLIs, and separate frontends.</span>
   </a>
-  <a class="home-card" href="/guides/cookies.html">
+  <a class="home-card" href="./guides/cookies">
     <span class="home-card-kicker">For browsers</span>
     <strong>HTTP-only cookies</strong>
     <span>Keep browser tokens away from JavaScript.</span>
   </a>
-  <a class="home-card" href="/guides/refresh-rotation.html">
+  <a class="home-card" href="./guides/refresh-rotation">
     <span class="home-card-kicker">For security</span>
     <strong>Refresh rotation</strong>
     <span>Detect replay and revoke a complete token family.</span>
@@ -66,6 +66,6 @@ app.get("/profile", auth.protect(), (req, res) => {
 ```
 
 <div class="home-actions">
-  <a href="/examples/rest-api.html">Run the complete Express example →</a>
-  <a href="/security.html">Review the security checklist →</a>
+  <a href="./examples/rest-api">Run the complete Express example →</a>
+  <a href="./security">Review the security checklist →</a>
 </div>
