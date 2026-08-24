@@ -5,6 +5,15 @@ Minimal JWT authentication for Node.js and Express APIs.
 No database. No hosted auth service. Just access tokens, refresh-token rotation,
 HTTP-only cookies, and RBAC with middleware your team can understand.
 
+## ⚠️ Attention — Breaking Changes & Upgrade Notes
+
+> [!NOTE]
+> Any release with breaking changes will list them in this section before the
+> rest of the README. For `1.1.2`, legacy `isRevoked` + `revokeRefreshToken`
+> hooks still work but emit a warning and are not concurrency-safe. Use the
+> atomic `consumeRefreshToken` hook for rotated refresh tokens, especially in
+> multi-instance deployments.
+
 **Start here:** [5-minute quick start](#quick-start-5-minutes) · [runnable examples](#examples) · [API reference](#api-reference)
 
 **Documentation:** [zero-auth.netlify.app](https://zero-auth.netlify.app/)
