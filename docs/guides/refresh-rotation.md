@@ -18,9 +18,10 @@ const auth = createAuth({
   refreshSecret: process.env.JWT_REFRESH_SECRET!,
   refreshOptions: {
     rotate: true,
-    isRevoked: async (jti) => revokedTokens.has(jti),
-    revokeRefreshToken: async (jti) => {
+    consumeRefreshToken: async (jti) => {
+      if (revokedTokens.has(jti)) return false;
       revokedTokens.add(jti);
+      return true;
     },
     registerRefreshToken: async (jti) => {
       activeTokens.add(jti);
@@ -34,4 +35,6 @@ const auth = createAuth({
 ```
 
 Use a shared store such as Redis when the application runs on multiple
-instances. The in-memory store is useful for local development only.
+instances. The in-memory store is useful for local development only. The
+legacy `isRevoked` + `revokeRefreshToken` hooks remain supported in 1.1.x with
+a warning, but use the atomic hook for concurrent or distributed traffic.

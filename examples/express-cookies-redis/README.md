@@ -28,6 +28,75 @@ npm start
 
 Server starts on **http://localhost:3001**.
 
+## Deploy with Docker Compose
+
+This repository includes a production-mode container for the example. It uses
+the root package as a local dependency, so run Compose from this directory:
+
+```bash
+cd examples/express-cookies-redis
+cp .env.example .env
+# Replace both JWT secrets in .env with random values before deploying.
+docker compose --profile container up --build -d
+```
+
+Check the deployment:
+
+```bash
+curl http://localhost:3001/healthz
+# {"status":"ok","redis":"ok"}
+
+docker compose logs -f app
+```
+
+The `app` container waits for Redis to pass its health check, listens on port
+`3001`, uses secure cookies because `NODE_ENV=production`, and shuts down
+cleanly on `SIGTERM`. Stop it with:
+
+```bash
+docker compose --profile container down
+```
+
+To deploy on a Node host instead, provide `NODE_ENV=production`,
+`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `REDIS_URL`, and `PORT` through the
+platform's secret/environment settings, then run:
+
+```bash
+npm ci --omit=dev
+npm start
+```
+
+Configure the platform health check as `GET /healthz`. Do not expose Redis to
+the public internet; use the private Redis URL supplied by your platform.
+
+## What makes the rotation safe
+
+The refresh flow is deliberately split into clear steps:
+
+1. `zero-auth` verifies the refresh JWT signature, expiry, and `id` claim.
+2. `consumeRefreshToken` runs Redis `SET NX` on `revoked:<jti>`. Exactly one
+   concurrent request can consume a refresh token.
+3. A successful request receives a new access/refresh pair. The new refresh
+   `jti` is registered under the token family.
+4. A replay returns `401` and calls `onRefreshReuse`, which revokes every known
+   `jti` in that family.
+
+The old `isRevoked` + `revokeRefreshToken` callbacks remain supported by
+`zero-auth` 1.1.x, but they log a warning and are not safe for concurrent
+requests. Use the atomic callback shown in `src/server.ts`.
+
+## Production boundary
+
+This is a deployable authentication reference, not a complete user service.
+The example hashes passwords with Node's built-in `scrypt`, never accepts a
+client-supplied admin role, and keeps users in memory so the example stays
+small. Replace the `users` array with your database before production; user
+registrations disappear when the process restarts or a container is replaced.
+
+For a real browser application, also add login/refresh rate limits, CSRF or
+strict origin protection for cookie-authenticated writes, an allow-listed CORS
+policy, HTTPS, and a trusted reverse-proxy configuration.
+
 ## Seed Users
 
 | Email                | Password   | Role  |
@@ -136,14 +205,14 @@ curl -X DELETE http://localhost:3001/admin/users/2 -b cookies.txt
 | `sendAuthTokens(res, user)`  | Register & Login (sets HTTP-only cookies)        |
 | `clearAuth(res)`             | Logout (clears cookies)                         |
 | `refreshHandler()` + rotate  | `POST /auth/refresh` (rotation + new cookies)   |
-| `revokeRefreshToken` hook    | Redis-backed revocation before issuing new pair  |
+| `consumeRefreshToken` hook   | Atomic Redis single-use check before issuing pair |
 | `registerRefreshToken` hook  | Tracks new jti under family in Redis            |
-| `isRevoked` hook             | Checks Redis before accepting refresh token      |
 | `onRefreshReuse` hook        | Revokes entire family on replay detection        |
 | `protect()`                  | `GET /profile`, `DELETE /admin/users/:id`       |
 | `authorize(["admin"])`       | `DELETE /admin/users/:id`                       |
 | `optional()`                 | `GET /posts`                                    |
 | `errorHandler`               | Mounted at app level                            |
+| `GET /healthz`               | Redis-backed health check                       |
 
 ## Stopping
 

@@ -16,15 +16,13 @@ describe("Cookie-based rotation and reuse detection", () => {
       cookies: { options: { secure: false } },
       refreshOptions: {
         rotate: true,
-        revokeRefreshToken: async (oldJti: string, ctx) => {
-          revoked.push(oldJti);
-          await store.revoke(oldJti, ctx?.familyId);
+        consumeRefreshToken: async (oldJti: string, ctx) => {
+          const firstUse = await store.consume(oldJti, ctx?.familyId);
+          if (firstUse) revoked.push(oldJti);
+          return firstUse;
         },
         registerRefreshToken: async (jti, ctx) => {
           await store.register(jti, ctx.familyId);
-        },
-        isRevoked: async (jti: string) => {
-          return store.isRevoked(jti);
         },
         onRefreshReuse: async (ctx) => {
           if (ctx.familyId) await store.revokeFamily(ctx.familyId);

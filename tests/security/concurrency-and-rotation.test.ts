@@ -7,7 +7,7 @@ const ACCESS_SECRET = "test-access-secret-32-chars-long-abc!";
 const REFRESH_SECRET = "test-refresh-secret-32-chars-long-xyz!";
 
 describe("Security Audit: Concurrency & Refresh Rotation Hardening", () => {
-  it("detects reuse and triggers onRefreshReuse when the same token is refreshed concurrently/sequentially", async () => {
+  it("detects sequential reuse and triggers onRefreshReuse", async () => {
     const store = createInMemoryRevocationStore();
     const onReuseSpy = vi.fn();
 
@@ -16,10 +16,7 @@ describe("Security Audit: Concurrency & Refresh Rotation Hardening", () => {
       refreshSecret: REFRESH_SECRET,
       refreshOptions: {
         rotate: true,
-        isRevoked: (jti) => store.isRevoked(jti),
-        revokeRefreshToken: async (jti, ctx) => {
-          await store.revoke(jti, ctx?.familyId);
-        },
+        consumeRefreshToken: (jti, ctx) => store.consume(jti, ctx?.familyId),
         registerRefreshToken: async (jti, ctx) => {
           await store.register(jti, ctx.familyId);
         },
@@ -78,6 +75,35 @@ describe("Security Audit: Concurrency & Refresh Rotation Hardening", () => {
     expect(subsequentRefreshRes.status).toBe(401);
   });
 
+  it("allows only one concurrent refresh for a single-use token", async () => {
+    const store = createInMemoryRevocationStore();
+    const onReuseSpy = vi.fn();
+
+    const auth = createAuth({
+      accessSecret: ACCESS_SECRET,
+      refreshSecret: REFRESH_SECRET,
+      refreshOptions: {
+        rotate: true,
+        consumeRefreshToken: (jti, ctx) => store.consume(jti, ctx?.familyId),
+        onRefreshReuse: onReuseSpy,
+      },
+    });
+
+    const app = express();
+    app.use(express.json());
+    app.post("/auth/refresh", auth.refreshHandler());
+    app.use(auth.errorHandler);
+
+    const { refreshToken } = await auth.generateTokenPair({ id: "user-concurrent" });
+    const [first, second] = await Promise.all([
+      request(app).post("/auth/refresh").send({ refreshToken }),
+      request(app).post("/auth/refresh").send({ refreshToken }),
+    ]);
+
+    expect([first.status, second.status].sort()).toEqual([200, 401]);
+    expect(onReuseSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("preserves custom application claims across multiple successive rotation hops", async () => {
     const store = createInMemoryRevocationStore();
 
@@ -86,10 +112,7 @@ describe("Security Audit: Concurrency & Refresh Rotation Hardening", () => {
       refreshSecret: REFRESH_SECRET,
       refreshOptions: {
         rotate: true,
-        isRevoked: (jti) => store.isRevoked(jti),
-        revokeRefreshToken: async (jti, ctx) => {
-          await store.revoke(jti, ctx?.familyId);
-        },
+        consumeRefreshToken: (jti, ctx) => store.consume(jti, ctx?.familyId),
         registerRefreshToken: async (jti, ctx) => {
           await store.register(jti, ctx.familyId);
         },
@@ -134,8 +157,7 @@ describe("Security Audit: Concurrency & Refresh Rotation Hardening", () => {
       refreshSecret: REFRESH_SECRET,
       refreshOptions: {
         rotate: true,
-        isRevoked: async () => false,
-        revokeRefreshToken: async () => {
+        consumeRefreshToken: async () => {
           throw new Error("Redis cluster connection timeout");
         },
       },

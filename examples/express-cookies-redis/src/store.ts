@@ -9,12 +9,29 @@
  *   family:<familyId>          — SET of jtis belonging to this token family
  */
 
-import Redis from "ioredis";
+import { Redis } from "ioredis";
 
 export function createRedisRevocationStore(redis: Redis, ttlSeconds = 60 * 60 * 24 * 8) {
   // TTL slightly longer than refresh token lifetime to cover clock skew.
 
   return {
+    /**
+     * Atomically consume a jti. Redis SET NX makes this safe across instances.
+     */
+    async consume(jti: string, familyId?: string): Promise<boolean> {
+      const result = await redis.set(`revoked:${jti}`, "1", "EX", ttlSeconds, "NX");
+      if (result !== "OK") return false;
+
+      if (familyId) {
+        const pipeline = redis.pipeline();
+        pipeline.sadd(`family:${familyId}`, jti);
+        pipeline.expire(`family:${familyId}`, ttlSeconds);
+        await pipeline.exec();
+      }
+
+      return true;
+    },
+
     /**
      * Mark a jti as revoked; optionally track it under a family.
      */

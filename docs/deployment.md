@@ -67,9 +67,11 @@ with `secure: true`.
 
 ## Multiple instances
 
-Access-token verification is stateless. Refresh-token rotation is not: the
-callbacks in `refreshOptions` need a shared store such as Redis or a database
-when requests can reach different instances.
+Access-token verification is stateless. Refresh-token rotation is not:
+`consumeRefreshToken` needs an atomic operation in a shared store such as Redis
+or a database when requests can reach different instances. The legacy
+`isRevoked` + `revokeRefreshToken` pair is retained in 1.1.x with a warning but
+is not concurrency-safe.
 
 The in-memory revocation store is suitable for local development and single-
 process tests, not for horizontally scaled production deployments.

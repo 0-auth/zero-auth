@@ -5,8 +5,8 @@ import { createAuth, createInMemoryRevocationStore } from "../../src/index.js";
 import { decodeToken } from "../../src/core/decode.js";
 
 describe("Refresh rotation", () => {
-  it("rotates refresh tokens and calls revoke hook before issuing", async () => {
-    const revoked: string[] = [];
+  it("rotates refresh tokens and consumes the old token before issuing", async () => {
+    const consumed: string[] = [];
     const store = createInMemoryRevocationStore();
 
     const auth = createAuth({
@@ -17,14 +17,14 @@ describe("Refresh rotation", () => {
       cookies: { options: { secure: false } },
       refreshOptions: {
         rotate: true,
-        revokeRefreshToken: async (jti: string, ctx) => {
-          revoked.push(jti);
-          await store.revoke(jti, ctx?.familyId);
+        consumeRefreshToken: async (jti: string, ctx) => {
+          const firstUse = await store.consume(jti, ctx?.familyId);
+          if (firstUse) consumed.push(jti);
+          return firstUse;
         },
         registerRefreshToken: async (jti, ctx) => {
           await store.register(jti, ctx.familyId);
         },
-        isRevoked: (jti) => store.isRevoked(jti),
       },
     });
 
@@ -53,12 +53,12 @@ describe("Refresh rotation", () => {
     expect(refreshRes.body).toHaveProperty("accessToken");
     expect(refreshRes.body).toHaveProperty("refreshToken");
 
-    expect(revoked.length).toBeGreaterThanOrEqual(1);
+    expect(consumed.length).toBe(1);
 
-    const oldJti = revoked[0]!;
+    const oldJti = consumed[0]!;
     expect(await store.isRevoked(oldJti)).toBe(true);
 
-    // Old refresh must already be revoked (atomic revoke-before-issue).
+    // Old refresh must already be consumed before issuing replacements.
     const replay = await request(app)
       .post("/auth/refresh")
       .set("Authorization", `Bearer ${oldRefresh}`)
@@ -66,15 +66,39 @@ describe("Refresh rotation", () => {
     expect(replay.status).toBe(401);
   });
 
-  it("fails closed when revokeRefreshToken throws", async () => {
+  it("keeps the legacy split-hook fallback working", async () => {
+    const store = createInMemoryRevocationStore();
+    const auth = createAuth({
+      accessSecret: "legacy-access-secret-min-32-chars-xxxx",
+      refreshSecret: "legacy-refresh-secret-min-32-chars-xxxx",
+      refreshOptions: {
+        rotate: true,
+        isRevoked: (jti) => store.isRevoked(jti),
+        revokeRefreshToken: (jti, ctx) => store.revoke(jti, ctx?.familyId),
+      },
+    });
+
+    const app = express();
+    app.use(express.json());
+    app.post("/auth/refresh", auth.refreshHandler());
+    app.use(auth.errorHandler);
+
+    const { refreshToken } = await auth.generateTokenPair({ id: "legacy-user" });
+    const res = await request(app).post("/auth/refresh").send({ refreshToken });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("accessToken");
+    expect(res.body).toHaveProperty("refreshToken");
+  });
+
+  it("fails closed when consumeRefreshToken throws", async () => {
     const auth = createAuth({
       accessSecret: "rotate-access-secret-min-32-chars-failc",
       refreshSecret: "rotate-refresh-secret-min-32-chars-failc",
       cookies: { options: { secure: false } },
       refreshOptions: {
         rotate: true,
-        isRevoked: async () => false,
-        revokeRefreshToken: async () => {
+        consumeRefreshToken: async () => {
           throw new Error("redis down");
         },
       },
@@ -108,8 +132,7 @@ describe("Refresh rotation", () => {
       cookies: { options: { secure: false } },
       refreshOptions: {
         rotate: true,
-        isRevoked: (jti) => store.isRevoked(jti),
-        revokeRefreshToken: (jti, ctx) => store.revoke(jti, ctx?.familyId),
+        consumeRefreshToken: (jti, ctx) => store.consume(jti, ctx?.familyId),
         registerRefreshToken: (jti, ctx) => store.register(jti, ctx.familyId),
       },
     });
@@ -133,9 +156,7 @@ describe("Refresh rotation", () => {
     const loginRes = await request(app).post("/auth/login");
     const refresh = loginRes.body.refreshToken as string;
 
-    const refreshRes = await request(app)
-      .post("/auth/refresh")
-      .send({ refreshToken: refresh });
+    const refreshRes = await request(app).post("/auth/refresh").send({ refreshToken: refresh });
 
     expect(refreshRes.status).toBe(200);
     const access = decodeToken(refreshRes.body.accessToken as string);
@@ -188,8 +209,7 @@ describe("Refresh rotation", () => {
       cookies: { options: { secure: false } },
       refreshOptions: {
         rotate: true,
-        isRevoked: (jti) => store.isRevoked(jti),
-        revokeRefreshToken: (jti, ctx) => store.revoke(jti, ctx?.familyId),
+        consumeRefreshToken: (jti, ctx) => store.consume(jti, ctx?.familyId),
         registerRefreshToken: (jti, ctx) => store.register(jti, ctx.familyId),
         onRefreshReuse: async (ctx) => {
           reuseEvents.push(ctx.jti);

@@ -4,11 +4,7 @@ import type { ResolvedConfig, JwtPayload, RefreshTokenContext } from "../types/a
 import { AuthError } from "../errors/authErrors.js";
 import { extractRefreshToken } from "../utils/extractToken.js";
 import { setCookie } from "../cookies/setCookie.js";
-import {
-  parseExpiryToSeconds,
-  toRefreshPayload,
-  withFamilyId,
-} from "../utils/helpers.js";
+import { parseExpiryToSeconds, toRefreshPayload, withFamilyId } from "../utils/helpers.js";
 import { logger } from "../utils/logger.js";
 
 /**
@@ -40,10 +36,7 @@ export function createRefreshHandler(engine: JwtEngine, config: ResolvedConfig):
     engine
       .verifyRefreshToken(token)
       .then(async (decoded) => {
-        const payload = withFamilyId(
-          toRefreshPayload(decoded),
-          config.refreshOptions.rotate
-        );
+        const payload = withFamilyId(toRefreshPayload(decoded), config.refreshOptions.rotate);
 
         const familyId =
           typeof payload["fid"] === "string" ? (payload["fid"] as string) : undefined;
@@ -53,23 +46,50 @@ export function createRefreshHandler(engine: JwtEngine, config: ResolvedConfig):
         };
         const incomingJti = decoded.jti;
 
-        // Reject reused / revoked refresh tokens before issuing anything new.
-        if (incomingJti && typeof config.refreshOptions.isRevoked === "function") {
+        const reportReuse = async (): Promise<void> => {
+          if (typeof config.refreshOptions.onRefreshReuse !== "function") return;
+          try {
+            await Promise.resolve(
+              config.refreshOptions.onRefreshReuse({
+                jti: incomingJti!,
+                ...tokenCtx,
+              })
+            );
+          } catch (reuseErr) {
+            logger.warn("refreshHandler: onRefreshReuse hook threw an error", reuseErr);
+          }
+        };
+
+        if (config.refreshOptions.rotate && !incomingJti) {
+          next(new AuthError("AUTH_TOKEN_INVALID", "Refresh token is missing a token id."));
+          return;
+        }
+
+        let consumed = false;
+        if (
+          config.refreshOptions.rotate &&
+          incomingJti &&
+          typeof config.refreshOptions.consumeRefreshToken === "function"
+        ) {
+          try {
+            consumed = await Promise.resolve(
+              config.refreshOptions.consumeRefreshToken(incomingJti, tokenCtx)
+            );
+            if (!consumed) {
+              await reportReuse();
+              next(new AuthError("AUTH_TOKEN_INVALID", "Refresh token has been revoked."));
+              return;
+            }
+          } catch (chkErr) {
+            logger.warn("refreshHandler: consumeRefreshToken hook threw an error", chkErr);
+            next(new AuthError("AUTH_TOKEN_INVALID", "Failed to consume refresh token."));
+            return;
+          }
+        } else if (incomingJti && typeof config.refreshOptions.isRevoked === "function") {
           try {
             const revoked = await Promise.resolve(config.refreshOptions.isRevoked(incomingJti));
             if (revoked) {
-              if (typeof config.refreshOptions.onRefreshReuse === "function") {
-                try {
-                  await Promise.resolve(
-                    config.refreshOptions.onRefreshReuse({
-                      jti: incomingJti,
-                      ...tokenCtx,
-                    })
-                  );
-                } catch (reuseErr) {
-                  logger.warn("refreshHandler: onRefreshReuse hook threw an error", reuseErr);
-                }
-              }
+              await reportReuse();
               next(new AuthError("AUTH_TOKEN_INVALID", "Refresh token has been revoked."));
               return;
             }
@@ -80,21 +100,20 @@ export function createRefreshHandler(engine: JwtEngine, config: ResolvedConfig):
           }
         }
 
-        // Rotation: revoke old jti BEFORE issuing replacements (fail closed).
+        // ponytail: legacy split check/revoke is race-prone; migrate to consumeRefreshToken.
         if (config.refreshOptions.rotate) {
-          if (incomingJti && typeof config.refreshOptions.revokeRefreshToken === "function") {
+          if (
+            incomingJti &&
+            !consumed &&
+            typeof config.refreshOptions.revokeRefreshToken === "function"
+          ) {
             try {
               await Promise.resolve(
                 config.refreshOptions.revokeRefreshToken(incomingJti, tokenCtx)
               );
             } catch (hookErr) {
               logger.warn("refreshHandler: revokeRefreshToken hook threw an error", hookErr);
-              next(
-                new AuthError(
-                  "AUTH_TOKEN_INVALID",
-                  "Failed to revoke previous refresh token."
-                )
-              );
+              next(new AuthError("AUTH_TOKEN_INVALID", "Failed to revoke previous refresh token."));
               return;
             }
           }
@@ -113,10 +132,7 @@ export function createRefreshHandler(engine: JwtEngine, config: ResolvedConfig):
               logger.warn("refreshHandler: registerRefreshToken hook threw an error", regErr);
               // Old token is already revoked; refuse to return tokens we cannot track.
               next(
-                new AuthError(
-                  "AUTH_TOKEN_INVALID",
-                  "Failed to register rotated refresh token."
-                )
+                new AuthError("AUTH_TOKEN_INVALID", "Failed to register rotated refresh token.")
               );
               return;
             }

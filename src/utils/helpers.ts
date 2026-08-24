@@ -56,7 +56,8 @@ export function resolveConfig(config: AuthConfig): ResolvedConfig {
 
         // Validate SameSite/Secure relationship: SameSite=None requires Secure.
         if (merged.sameSite === "none" && merged.secure === false) {
-          const msg = "[zero-auth] Cookie option " +
+          const msg =
+            "[zero-auth] Cookie option " +
             "`sameSite: 'none'` requires `secure: true` to work in modern browsers.";
           if (process.env["NODE_ENV"] === "production") {
             throw new Error(msg);
@@ -70,15 +71,16 @@ export function resolveConfig(config: AuthConfig): ResolvedConfig {
     },
     refreshOptions: {
       rotate: config.refreshOptions?.rotate ?? false,
+      ...(config.refreshOptions?.consumeRefreshToken
+        ? { consumeRefreshToken: config.refreshOptions.consumeRefreshToken }
+        : {}),
       ...(config.refreshOptions?.revokeRefreshToken
         ? { revokeRefreshToken: config.refreshOptions.revokeRefreshToken }
         : {}),
       ...(config.refreshOptions?.registerRefreshToken
         ? { registerRefreshToken: config.refreshOptions.registerRefreshToken }
         : {}),
-      ...(config.refreshOptions?.isRevoked
-        ? { isRevoked: config.refreshOptions.isRevoked }
-        : {}),
+      ...(config.refreshOptions?.isRevoked ? { isRevoked: config.refreshOptions.isRevoked } : {}),
       ...(config.refreshOptions?.onRefreshReuse
         ? { onRefreshReuse: config.refreshOptions.onRefreshReuse }
         : {}),
@@ -185,24 +187,30 @@ function validateSecrets(config: AuthConfig): void {
   }
 }
 
-/**
- * Rotation without revocation checks is insecure — enforce hooks in production.
- */
+/** Rotation without an atomic consume operation is unsafe under concurrency. */
 function validateRefreshOptions(config: AuthConfig): void {
   if (!config.refreshOptions?.rotate) return;
 
   const isProd = process.env["NODE_ENV"] === "production";
+  if (typeof config.refreshOptions.consumeRefreshToken === "function") return;
+
   const missing: string[] = [];
   if (typeof config.refreshOptions.isRevoked !== "function") missing.push("isRevoked");
   if (typeof config.refreshOptions.revokeRefreshToken !== "function") {
     missing.push("revokeRefreshToken");
   }
 
-  if (missing.length === 0) return;
+  if (missing.length > 0) {
+    const msg =
+      `[zero-auth] refreshOptions.rotate requires ${missing.join(" and ")} ` +
+      "for legacy refresh-token replay protection.";
+    if (isProd) throw new Error(msg);
+    console.warn(`WARNING: ${msg}`);
+    return;
+  }
 
-  const msg =
-    `[zero-auth] refreshOptions.rotate requires ${missing.join(" and ")} ` +
-    "so reused refresh tokens can be detected and invalidated.";
-  if (isProd) throw new Error(msg);
-  console.warn(`WARNING: ${msg}`);
+  console.warn(
+    "WARNING: [zero-auth] isRevoked + revokeRefreshToken are deprecated and " +
+      "not concurrency-safe; use consumeRefreshToken."
+  );
 }

@@ -219,8 +219,8 @@ const auth = createAuth({
   // Optional Refresh Rotation & Revocation
   refreshOptions: {
     rotate: false,           // Set to true to enable Refresh Token Rotation
-    isRevoked: async (jti) => false,
-    revokeRefreshToken: async (oldJti, ctx) => {},
+    // Required when rotate: true: implement an atomic single-use check.
+    // consumeRefreshToken: (oldJti, ctx) => redis.set(..., { NX: true }).then(result => result === "OK"),
     registerRefreshToken: async (newJti, ctx) => {},
     onRefreshReuse: async (ctx) => {},
   },
@@ -338,6 +338,12 @@ app.post("/auth/refresh", auth.refreshHandler());
 
 When `refreshOptions.rotate: true` is enabled, a new refresh token is issued on every refresh request, and old tokens are invalidated. If an old token is reused (indicating a stolen token), `onRefreshReuse` is triggered to invalidate the entire token family.
 
+`consumeRefreshToken` should atomically mark the incoming `jti` as consumed and
+return `false` when it was already consumed. Use a Redis `SET NX` or equivalent
+database conditional write when the application runs on multiple instances.
+The legacy `isRevoked` + `revokeRefreshToken` pair remains supported in 1.1.x,
+but logs a warning and is not concurrency-safe.
+
 ```ts
 import { createClient } from "redis";
 import { createAuth } from "@0-auth/zero-auth";
@@ -352,16 +358,17 @@ const auth = createAuth({
   refreshSecret: process.env.JWT_REFRESH_SECRET!,
   refreshOptions: {
     rotate: true,
-    // Check if token was already revoked
-    isRevoked: async (jti) => {
-      return (await redis.exists(`revoked:${jti}`)) === 1;
-    },
-    // Revoke the old token before issuing new tokens
-    revokeRefreshToken: async (oldJti, ctx) => {
-      await redis.set(`revoked:${oldJti}`, "1", { EX: REFRESH_TTL_SECONDS });
+    // SET NX atomically consumes the old token across all instances.
+    consumeRefreshToken: async (oldJti, ctx) => {
+      const result = await redis.set(`revoked:${oldJti}`, "1", {
+        EX: REFRESH_TTL_SECONDS,
+        NX: true,
+      });
+      if (result !== "OK") return false;
       if (ctx?.familyId) {
         await redis.sAdd(`family:${ctx.familyId}`, oldJti);
       }
+      return true;
     },
     // Register the new token under the family
     registerRefreshToken: async (newJti, ctx) => {

@@ -8,7 +8,7 @@
  * Features shown:
  *   • Cookie-based auth (auth.sendAuthTokens / auth.clearAuth)
  *   • Refresh token rotation (rotate: true)
- *   • Redis-backed revocation store (isRevoked, revokeRefreshToken, etc.)
+ *   • Redis-backed atomic refresh-token consumption
  *   • Token family revocation on reuse detection (onRefreshReuse)
  *   • Protected routes, RBAC, optional auth
  *   • Structured error handling
@@ -22,14 +22,47 @@
  */
 
 import "dotenv/config";
+import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 import express from "express";
-import Redis from "ioredis";
+import { Redis } from "ioredis";
 import { createAuth } from "@0-auth/zero-auth";
 import { createRedisRevocationStore } from "./store.js";
 
+const scrypt = promisify(scryptCallback);
+const isProduction = process.env["NODE_ENV"] === "production";
+const redisUrl = process.env["REDIS_URL"] ?? "redis://localhost:6379";
+
+if (isProduction) {
+  const missing = [
+    !process.env["JWT_ACCESS_SECRET"] && "JWT_ACCESS_SECRET",
+    !process.env["JWT_REFRESH_SECRET"] && "JWT_REFRESH_SECRET",
+    !process.env["REDIS_URL"] && "REDIS_URL",
+  ].filter(Boolean);
+
+  if (missing.length > 0) {
+    throw new Error(`Missing production environment variables: ${missing.join(", ")}`);
+  }
+}
+
+async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString("hex");
+  const key = (await scrypt(password, salt, 64)) as Buffer;
+  return `${salt}:${key.toString("hex")}`;
+}
+
+async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
+  const [salt, keyHex] = storedHash.split(":");
+  if (!salt || !keyHex) return false;
+
+  const expected = Buffer.from(keyHex, "hex");
+  const actual = (await scrypt(password, salt, expected.length)) as Buffer;
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
 // ─── Redis ───────────────────────────────────────────────────────────────────
 
-const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+const redis = new Redis(redisUrl);
 const store = createRedisRevocationStore(redis);
 
 redis.on("connect", () => console.log("✅ Connected to Redis"));
@@ -40,13 +73,23 @@ redis.on("error", (err) => console.error("❌ Redis error:", err.message));
 interface User {
   id: string;
   email: string;
-  password: string;
+  passwordHash: string;
   role: string;
 }
 
 const users: User[] = [
-  { id: "1", email: "admin@example.com", password: "admin123", role: "admin" },
-  { id: "2", email: "user@example.com", password: "user123", role: "user" },
+  {
+    id: "1",
+    email: "admin@example.com",
+    passwordHash: await hashPassword("admin123"),
+    role: "admin",
+  },
+  {
+    id: "2",
+    email: "user@example.com",
+    passwordHash: await hashPassword("user123"),
+    role: "user",
+  },
 ];
 
 let nextId = 3;
@@ -54,12 +97,8 @@ let nextId = 3;
 // ─── Auth Instance ───────────────────────────────────────────────────────────
 
 const auth = createAuth({
-  accessSecret:
-    process.env.JWT_ACCESS_SECRET ||
-    "dev-access-secret-at-least-32-characters!!",
-  refreshSecret:
-    process.env.JWT_REFRESH_SECRET ||
-    "dev-refresh-secret-at-least-32-characters!",
+  accessSecret: process.env["JWT_ACCESS_SECRET"] || "dev-access-secret-at-least-32-characters!!",
+  refreshSecret: process.env["JWT_REFRESH_SECRET"] || "dev-refresh-secret-at-least-32-characters!",
   accessExpiresIn: "15m",
   refreshExpiresIn: "7d",
 
@@ -68,7 +107,7 @@ const auth = createAuth({
     accessTokenName: "access_token",
     refreshTokenName: "refresh_token",
     options: {
-      secure: false, // set true in production (HTTPS)
+      secure: isProduction,
       sameSite: "lax",
       path: "/",
     },
@@ -78,16 +117,11 @@ const auth = createAuth({
   refreshOptions: {
     rotate: true,
 
-    // Called before issuing new tokens — revoke the old jti.
-    revokeRefreshToken: (oldJti, ctx) =>
-      store.revoke(oldJti, ctx?.familyId),
+    // Redis SET NX makes each refresh token single-use across instances.
+    consumeRefreshToken: (oldJti, ctx) => store.consume(oldJti, ctx?.familyId),
 
     // Called after issuing new tokens — track the new jti under its family.
-    registerRefreshToken: (newJti, ctx) =>
-      store.register(newJti, ctx.familyId),
-
-    // Called on every refresh to check if the incoming jti is already revoked.
-    isRevoked: (jti) => store.isRevoked(jti),
+    registerRefreshToken: (newJti, ctx) => store.register(newJti, ctx.familyId),
 
     // Called when a revoked token is replayed — kill the entire family.
     onRefreshReuse: async (ctx) => {
@@ -104,15 +138,25 @@ const auth = createAuth({
 // ─── Express App ─────────────────────────────────────────────────────────────
 
 const app = express();
+app.disable("x-powered-by");
+if (isProduction) app.set("trust proxy", 1);
 app.use(express.json());
+
+app.get("/healthz", async (_req, res) => {
+  try {
+    await redis.ping();
+    res.json({ status: "ok", redis: "ok" });
+  } catch {
+    res.status(503).json({ status: "unhealthy", redis: "unavailable" });
+  }
+});
 
 // ── Public: Register ─────────────────────────────────────────────────────────
 
 app.post("/auth/register", async (req, res) => {
-  const { email, password, role } = req.body as {
+  const { email, password } = req.body as {
     email?: string;
     password?: string;
-    role?: string;
   };
 
   if (!email || !password) {
@@ -128,8 +172,8 @@ app.post("/auth/register", async (req, res) => {
   const user: User = {
     id: String(nextId++),
     email,
-    password,
-    role: role || "user",
+    passwordHash: await hashPassword(password),
+    role: "user",
   };
   users.push(user);
 
@@ -151,8 +195,8 @@ app.post("/auth/login", async (req, res) => {
     password?: string;
   };
 
-  const user = users.find((u) => u.email === email && u.password === password);
-  if (!user) {
+  const user = users.find((u) => u.email === email);
+  if (!user || !(await verifyPassword(password || "", user.passwordHash))) {
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
@@ -204,23 +248,18 @@ app.get("/posts", auth.optional(), (req, res) => {
 
 // ── Protected + RBAC: Admin Delete User ──────────────────────────────────────
 
-app.delete(
-  "/admin/users/:id",
-  auth.protect(),
-  auth.authorize(["admin"]),
-  (req, res) => {
-    const targetId = req.params.id;
-    const idx = users.findIndex((u) => u.id === targetId);
+app.delete("/admin/users/:id", auth.protect(), auth.authorize(["admin"]), (req, res) => {
+  const targetId = req.params.id;
+  const idx = users.findIndex((u) => u.id === targetId);
 
-    if (idx === -1) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
-
-    users.splice(idx, 1);
-    res.json({ message: `User ${targetId} deleted`, deletedBy: req.user!.id });
+  if (idx === -1) {
+    res.status(404).json({ error: "User not found" });
+    return;
   }
-);
+
+  users.splice(idx, 1);
+  res.json({ message: `User ${targetId} deleted`, deletedBy: req.user!.id });
+});
 
 // ── Error Handler (must be last) ─────────────────────────────────────────────
 
@@ -233,8 +272,8 @@ export { app, auth, store, redis };
 // ── Start Server ─────────────────────────────────────────────────────────────
 
 if (process.env["NODE_ENV"] !== "test") {
-  const PORT = process.env.PORT || 3001;
-  app.listen(PORT, () => {
+  const PORT = Number(process.env["PORT"] || 3001);
+  const server = app.listen(PORT, () => {
     console.log(`
 ┌──────────────────────────────────────────────────────────────┐
 │  @0-auth/zero-auth — Cookie + Redis Rotation Example         │
@@ -257,4 +296,15 @@ if (process.env["NODE_ENV"] !== "test") {
 └──────────────────────────────────────────────────────────────┘
     `);
   });
+
+  const shutdown = (signal: string) => {
+    console.log(`${signal} received; shutting down`);
+    server.close(async () => {
+      await redis.quit().catch(() => redis.disconnect());
+      process.exit(0);
+    });
+  };
+
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
 }

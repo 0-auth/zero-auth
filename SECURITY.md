@@ -52,4 +52,4 @@ When using `@0-auth/zero-auth` in production applications:
 - **Secrets**: Use high-entropy random secrets of at least 32 characters for `accessSecret` and `refreshSecret`. Never use hardcoded secrets.
 - **HTTPS & Cookies**: Always run your production environment over HTTPS and ensure `cookies.options.secure: true` (enabled automatically when `NODE_ENV === 'production'`).
 - **Token Lifespans**: Keep access token expiration short (`15m` recommended) and handle session continuity via refresh token rotation.
-- **Durable Revocation**: If enabling `refreshOptions.rotate`, always back `isRevoked` and `revokeRefreshToken` with a distributed store like Redis to fail closed upon token replay.
+- **Atomic Refresh Consumption**: If enabling `refreshOptions.rotate`, implement `consumeRefreshToken` with an atomic operation such as Redis `SET NX` so concurrent requests cannot reuse the same refresh token. The legacy split hooks remain for 1.1.x compatibility but are not concurrency-safe.

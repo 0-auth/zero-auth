@@ -1,11 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { parseCookieHeader } from "../../src/cookies/parseCookie.js";
 import { decodeToken } from "../../src/core/decode.js";
-import {
-  parseExpiryToSeconds,
-  toRefreshPayload,
-  withFamilyId,
-} from "../../src/utils/helpers.js";
+import { parseExpiryToSeconds, toRefreshPayload, withFamilyId } from "../../src/utils/helpers.js";
 import { signToken } from "../../src/core/sign.js";
 import { createAuth } from "../../src/index.js";
 import { AuthError } from "../../src/errors/authErrors.js";
@@ -175,12 +171,18 @@ describe("resolveConfig & validation", () => {
   const originalEnv = process.env["NODE_ENV"];
 
   it("throws when accessSecret or refreshSecret is missing", () => {
-    expect(() => createAuth({ accessSecret: "", refreshSecret: "valid-32-chars-long-refresh-secret!" } as unknown as AuthConfig)).toThrowError(
-      "[zero-auth] `accessSecret` is required."
-    );
-    expect(() => createAuth({ accessSecret: "valid-32-chars-long-access-secret!", refreshSecret: "" } as unknown as AuthConfig)).toThrowError(
-      "[zero-auth] `refreshSecret` is required."
-    );
+    expect(() =>
+      createAuth({
+        accessSecret: "",
+        refreshSecret: "valid-32-chars-long-refresh-secret!",
+      } as unknown as AuthConfig)
+    ).toThrowError("[zero-auth] `accessSecret` is required.");
+    expect(() =>
+      createAuth({
+        accessSecret: "valid-32-chars-long-access-secret!",
+        refreshSecret: "",
+      } as unknown as AuthConfig)
+    ).toThrowError("[zero-auth] `refreshSecret` is required.");
   });
 
   it("enforces 32-char secrets and distinct secrets in production", () => {
@@ -211,7 +213,7 @@ describe("resolveConfig & validation", () => {
     }
   });
 
-  it("enforces revocation hooks when rotate: true in production", () => {
+  it("enforces atomic refresh consumption when rotate: true in production", () => {
     process.env["NODE_ENV"] = "production";
     try {
       expect(() =>
@@ -223,6 +225,24 @@ describe("resolveConfig & validation", () => {
           },
         })
       ).toThrowError("[zero-auth] refreshOptions.rotate requires isRevoked and revokeRefreshToken");
+
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        expect(() =>
+          createAuth({
+            accessSecret: "valid-32-chars-long-access-secret!",
+            refreshSecret: "valid-32-chars-long-refresh-secret!",
+            refreshOptions: {
+              rotate: true,
+              isRevoked: () => false,
+              revokeRefreshToken: () => {},
+            },
+          })
+        ).not.toThrow();
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining("not concurrency-safe"));
+      } finally {
+        warn.mockRestore();
+      }
     } finally {
       process.env["NODE_ENV"] = originalEnv;
     }

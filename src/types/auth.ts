@@ -20,29 +20,32 @@ export interface AuthConfig {
   refreshOptions?: {
     /**
      * When true, issue a new refresh token alongside the new access token.
-     * Requires `isRevoked` + `revokeRefreshToken` in production.
+     * Use `consumeRefreshToken` for atomic replay protection. In 1.1.x, the
+     * legacy hook pair remains accepted with a warning.
      * A stable `fid` (family id) claim is auto-injected when missing.
      * @default false
      */
     rotate?: boolean;
     /**
+     * Atomically consume the old refresh token before issuing replacements.
+     * Return `true` only when this call marks the `jti` for the first time;
+     * return `false` when it was already consumed. Use an atomic store
+     * operation such as Redis `SET NX` for multi-instance deployments.
+     */
+    consumeRefreshToken?: (oldJti: string, ctx?: RefreshTokenContext) => Promise<boolean> | boolean;
+    /**
      * Called with the old refresh token `jti` **before** new tokens are issued.
+     * @deprecated Use `consumeRefreshToken` for concurrency-safe rotation.
      * Failures abort the refresh (fail closed). Optional second `ctx` includes
      * `userId` and `familyId` for family-aware stores.
      */
-    revokeRefreshToken?: (
-      oldJti: string,
-      ctx?: RefreshTokenContext
-    ) => Promise<void> | void;
+    revokeRefreshToken?: (oldJti: string, ctx?: RefreshTokenContext) => Promise<void> | void;
     /**
      * Called after a new refresh token is issued so stores can track the new
      * `jti` under its family (needed for family revocation on reuse).
      */
-    registerRefreshToken?: (
-      newJti: string,
-      ctx: RefreshTokenContext
-    ) => Promise<void> | void;
-    /** Return `true` to reject the refresh as a replay of a revoked token. */
+    registerRefreshToken?: (newJti: string, ctx: RefreshTokenContext) => Promise<void> | void;
+    /** @deprecated Use `consumeRefreshToken` for concurrency-safe rotation. */
     isRevoked?: (jti: string) => Promise<boolean> | boolean;
     /**
      * Called when a revoked refresh token is presented (reuse detected).
@@ -93,14 +96,9 @@ export interface ResolvedConfig {
   cookies: Required<CookieConfig> & { options: CookieOptions };
   refreshOptions: {
     rotate: boolean;
-    revokeRefreshToken?: (
-      oldJti: string,
-      ctx?: RefreshTokenContext
-    ) => Promise<void> | void;
-    registerRefreshToken?: (
-      newJti: string,
-      ctx: RefreshTokenContext
-    ) => Promise<void> | void;
+    consumeRefreshToken?: (oldJti: string, ctx?: RefreshTokenContext) => Promise<boolean> | boolean;
+    revokeRefreshToken?: (oldJti: string, ctx?: RefreshTokenContext) => Promise<void> | void;
+    registerRefreshToken?: (newJti: string, ctx: RefreshTokenContext) => Promise<void> | void;
     isRevoked?: (jti: string) => Promise<boolean> | boolean;
     onRefreshReuse?: (ctx: RefreshReuseContext) => Promise<void> | void;
   };
@@ -159,4 +157,3 @@ declare global {
     }
   }
 }
-

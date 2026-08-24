@@ -20,6 +20,19 @@ export function createInMemoryRevocationStore(ttlSeconds = 60 * 60 * 24) {
   }
 
   return {
+    /** Atomically consume a jti; returns false when it was already consumed. */
+    async consume(jti: string, familyId?: string): Promise<boolean> {
+      const exp = map.get(jti);
+      if (exp !== undefined) {
+        if (exp >= nowMs()) return false;
+        map.delete(jti);
+      }
+
+      map.set(jti, nowMs() + ttlSeconds * 1000);
+      trackFamily(jti, familyId);
+      return true;
+    },
+
     /** Mark a jti as revoked; optionally associate it with a family. */
     async revoke(jti: string, familyId?: string): Promise<void> {
       const expiry = nowMs() + ttlSeconds * 1000;
