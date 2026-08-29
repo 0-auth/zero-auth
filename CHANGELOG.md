@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Expand documentation for authentication flows, CSRF, permissions,
+  refresh-token rotation, deployment, testing, clients, and releases.
+- Add CI documentation-build validation.
+
 ## 1.2.0 - 2026-08-29
 
 - Add signed double-submit CSRF protection for cookie-authenticated requests.

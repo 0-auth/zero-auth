@@ -1,45 +1,113 @@
 # zero-auth
 
-zero-auth is a small TypeScript authentication layer for Node.js APIs. It
-provides Express middleware and utilities for JWT access tokens, refresh-token
-rotation, HTTP-only cookies, optional authentication, and role-based access
-control. It does not provide a hosted user database or identity platform.
+zero-auth is a small TypeScript authentication layer for Node.js and Express
+APIs. It provides JWT access tokens, refresh-token rotation, HTTP-only cookies,
+signed double-submit CSRF protection, optional authentication, and role and
+permission authorization. It does not provide a hosted user database,
+password hashing, OAuth providers, MFA, or a user-management interface.
 
 ## Start here
 
 Install the package with:
 
-```bash
+~~~bash
 npm install @0-auth/zero-auth express
-```
+~~~
 
 Create an auth instance with separate secrets of at least 32 characters:
 
-```ts
+~~~ts
+import { createAuth } from "@0-auth/zero-auth";
+
 const auth = createAuth({
   accessSecret: process.env.JWT_ACCESS_SECRET!,
   refreshSecret: process.env.JWT_REFRESH_SECRET!,
 });
-```
+~~~
 
-Protect an Express route with `auth.protect()`:
+Protect an Express route:
 
-```ts
+~~~ts
 app.get("/profile", auth.protect(), (req, res) => {
   res.json({ user: req.user });
 });
-```
 
-## Important concepts
+app.use(auth.errorHandler);
+~~~
 
-- Access tokens should be short-lived and sent as bearer tokens or secure cookies.
-- Refresh tokens should be rotated and stored using the application's chosen store.
-- HTTP-only cookies prevent browser JavaScript from reading token values.
-- `auth.authorize(...)` supports role and permission checks after authentication.
-- Refresh-token reuse detection can revoke the complete token family.
+## Authentication choices
+
+- Bearer tokens are explicit headers for mobile, CLI, and server-to-server clients.
+- HTTP-only cookies keep browser token values away from JavaScript.
+- Cookie-authenticated state-changing requests require CSRF protection.
+- Access tokens should be short-lived, usually about 15 minutes.
+- Refresh tokens should use rotation and a shared atomic store when replay
+  detection or multiple instances matter.
+
+## Authorization
+
+Run protect before authorization:
+
+~~~ts
+app.patch(
+  "/users/:id",
+  auth.protect(),
+  auth.authorize(["admin", "support"]),
+  auth.authorizePermissions(["users:update"]),
+  updateUserHandler,
+);
+~~~
+
+authorize allows any matching role. authorizePermissions requires every listed
+permission from the verified JWT permissions claim. Resource ownership remains
+an application responsibility.
+
+## Cookie CSRF protection
+
+~~~ts
+app.use(auth.csrf());
+
+app.get("/auth/csrf-token", (_req, res) => {
+  res.json({ csrfToken: auth.csrfToken(res) });
+});
+~~~
+
+By default, POST, PUT, PATCH, and DELETE requests carrying an auth cookie need
+the same signed value in the readable CSRF cookie and configured request
+header. Missing or invalid values return 403 AUTH_CSRF_INVALID.
+
+## Refresh rotation
+
+When rotate is true, consumeRefreshToken must atomically mark the incoming jti
+and return true only for the first request. Redis SET NX or a database
+constraint can provide this guarantee. registerRefreshToken tracks replacement
+tokens, and onRefreshReuse can revoke the token family.
+
+The legacy isRevoked and revokeRefreshToken hooks remain supported with a
+warning, but their separate check/write sequence is not concurrency-safe.
+
+## Errors
+
+The package returns structured AuthError responses:
+
+- 401 AUTH_TOKEN_MISSING
+- 401 AUTH_TOKEN_INVALID
+- 401 AUTH_TOKEN_EXPIRED
+- 401 AUTH_UNAUTHORIZED
+- 403 AUTH_FORBIDDEN
+- 403 AUTH_CSRF_INVALID
+
+Use the exact error code for client behavior rather than matching message text.
+
+## Deployment
+
+Your application owns secrets, users, password hashing, TLS, CORS, rate
+limiting, storage, monitoring, and resource ownership. Use HTTPS, separate
+high-entropy secrets, secure cookie settings, a trusted proxy configuration,
+and a shared refresh store for horizontally scaled deployments.
 
 ## Documentation
 
-See [llms.txt](/v1/llms.txt) for the complete documentation index and links to
-the quick start, guides, examples, security checklist, and generated API
-reference.
+See [llms.txt](/v1/llms.txt) for the documentation index. The full guides
+cover configuration, clients, security, deployment, testing, troubleshooting,
+versioning, releases, examples, and the generated API reference.

@@ -7,6 +7,7 @@
  *
  * Features shown:
  *   • Cookie-based auth (auth.sendAuthTokens / auth.clearAuth)
+ *   • Signed double-submit CSRF protection for cookie writes
  *   • Refresh token rotation (rotate: true)
  *   • Redis-backed atomic refresh-token consumption
  *   • Token family revocation on reuse detection (onRefreshReuse)

@@ -103,9 +103,75 @@ token. The replay should return `AUTH_TOKEN_INVALID` and call your
 
 ## What to test in an application
 
+- Run the complete release checks before deployment:
+
+~~~bash
+npm run format:check
+npm run lint
+npm run typecheck
+npm run test:coverage
+npm run build
+npm run docs:build
+npm pack --dry-run
+~~~
+
 - Missing, malformed, expired, and tampered tokens
 - Access tokens rejected where refresh tokens are expected
 - Users with allowed and disallowed roles
+- Users with all required permissions and users missing one permission
 - Cookie flags and logout behavior
+- Missing, mismatched, tampered, and valid CSRF tokens
 - Refresh-token replay and family revocation
 - Error responses without leaking secrets or raw token contents
+
+## Test refresh concurrency
+
+The rotation store must allow exactly one request to consume a refresh token:
+
+~~~bash
+npm test -- --run tests/security/concurrency-and-rotation.test.ts
+~~~
+
+For an application-level stress check, send the same refresh token from many
+concurrent clients and verify one success followed by rejected replays. Do not
+use this test against a production user's session.
+
+## Test the examples
+
+The stateless example needs only Node.js:
+
+~~~bash
+cd examples/express-rest-api
+npm install
+npm test
+~~~
+
+The cookie example needs Redis:
+
+~~~bash
+cd examples/express-cookies-redis
+docker compose up -d
+npm install
+npm test
+docker compose down
+~~~
+
+The cookie test covers health, registration, login, CSRF setup, missing-CSRF
+rejection, protected cookies, rotation, and logout.
+
+## Test cURL behavior
+
+For bearer clients, verify success and the expected unauthenticated response:
+
+~~~bash
+curl http://localhost:3000/profile \
+  -H "Authorization: Bearer <access-token>"
+
+curl -i http://localhost:3000/profile
+~~~
+
+For cookie clients, preserve cookies with <code>-c cookies.txt</code> and
+<code>-b cookies.txt</code>. Obtain the CSRF token before refresh, logout, or
+other state-changing requests. See the
+[cookie + Redis example README](https://github.com/0-auth/zero-auth/tree/master/examples/express-cookies-redis)
+and the [client guide](/clients).

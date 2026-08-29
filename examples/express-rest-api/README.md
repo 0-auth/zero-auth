@@ -12,6 +12,11 @@ npm start
 
 Server starts on **http://localhost:3000**.
 
+This example is a stateless bearer-token reference. It keeps users in memory
+and uses demo password handling, so replace both with a database and a real
+password-hashing policy before production. Use the cookie + Redis example for
+HTTP-only cookies, CSRF protection, and refresh-token replay detection.
+
 ## Seed Users
 
 | Email                | Password   | Role  |
@@ -128,6 +133,16 @@ curl "http://localhost:3000/token/inspect?token=<anyJwt>"
 Returns the decoded payload without verifying the signature — useful for debugging.
 
 ---
+
+## Run the automated example test
+
+~~~bash
+npm test
+~~~
+
+The test starts the app on an ephemeral port and checks registration, login,
+protected access, missing-token behavior, optional authentication, refresh,
+RBAC, and token inspection.
 
 ## Features Demonstrated
 

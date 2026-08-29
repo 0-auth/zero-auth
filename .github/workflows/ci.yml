@@ -35,5 +35,8 @@ jobs:
       - name: Build package
         run: npm run build
 
+      - name: Build documentation
+        run: npm run docs:build
+
       - name: Run tests with coverage threshold
         run: npm run test:coverage

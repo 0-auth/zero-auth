@@ -22,7 +22,7 @@ export default defineConfig({
   themeConfig: {
     nav: [
       { text: "v1", link: "/" },
-      { text: "Guide", link: "/" },
+      { text: "Guide", link: "/quick-start" },
       { text: "API Reference", link: "/api/" },
       { text: "GitHub", link: "https://github.com/0-auth/zero-auth" },
     ],
@@ -43,6 +43,7 @@ export default defineConfig({
             { text: "HTTP-only cookies", link: "/guides/cookies" },
             { text: "RBAC and optional auth", link: "/guides/access-control" },
             { text: "Refresh token rotation", link: "/guides/refresh-rotation" },
+            { text: "Architecture and request flows", link: "/architecture" },
           ],
         },
         { text: "Configuration", link: "/configuration" },
@@ -53,6 +54,8 @@ export default defineConfig({
         { text: "Security checklist", link: "/security" },
         { text: "Client examples", link: "/clients" },
         { text: "Error reference", link: "/errors" },
+        { text: "Changelog", link: "/changelog" },
+        { text: "Release and maintenance", link: "/releasing" },
         { text: "API Reference", items: [{ text: "Overview", link: "/api/" }] },
       ],
       "/api/": [{ text: "API Reference", link: "/api/" }],

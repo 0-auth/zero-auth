@@ -108,6 +108,37 @@ Only for a single process with no restart or scaling requirements. Use Redis or
 a database for multiple instances, deployments that restart, and refresh-token
 reuse detection.
 
+## Why does a permission check return AUTH_FORBIDDEN?
+
+Run protect() before authorizePermissions() and make sure the verified JWT
+contains every required string in its permissions claim:
+
+~~~ts
+app.get(
+  "/reports",
+  auth.protect(),
+  auth.authorizePermissions(["reports:read", "reports:export"]),
+  handler,
+);
+~~~
+
+Permission checks require all listed permissions. They do not replace
+application checks for tenant or record ownership.
+
+## Why do cookie writes return AUTH_CSRF_INVALID?
+
+Call the CSRF endpoint with credentials, keep the returned CSRF cookie, and
+copy the returned token into the configured request header. Check that the
+request still includes credentials and that cookie path, domain, and SameSite
+settings match the deployment.
+
+## Why does refresh fail under load?
+
+Rotated refresh tokens are single-use. Concurrent requests using the same
+refresh token should produce one success and rejected replays. Use
+consumeRefreshToken with an atomic shared-store operation; the legacy split
+hooks are not concurrency-safe.
+
 ## What should I log?
 
 Log the error code, status, route, and request ID. Never log access tokens,

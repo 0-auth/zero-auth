@@ -82,8 +82,9 @@ The refresh flow is deliberately split into clear steps:
    `jti` in that family.
 
 The old `isRevoked` + `revokeRefreshToken` callbacks remain supported by
-`zero-auth` 1.1.x, but they log a warning and are not safe for concurrent
-requests. Use the atomic callback shown in `src/server.ts`.
+The legacy split hooks remain supported for compatibility, but they log a
+warning and are not safe for concurrent requests. Use the atomic callback shown
+in `src/server.ts`.
 
 ## Production boundary
 
@@ -215,6 +216,16 @@ curl -X DELETE http://localhost:3001/admin/users/2 \
                             │  Redis ops  │
                             └─────────────┘
 ```
+
+## Run the automated example test
+
+~~~bash
+npm test
+~~~
+
+The test starts an ephemeral HTTP server, verifies Redis health, exercises
+cookie login, CSRF setup and rejection, protected access, refresh rotation,
+and logout. Redis must be running first.
 
 ## Features Demonstrated
 

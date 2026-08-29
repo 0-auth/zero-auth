@@ -6,6 +6,9 @@
 npm install @0-auth/zero-auth express
 ```
 
+`zero-auth` supports Node.js 18+ and Express 4 or 5. This guide uses bearer
+tokens; use the [cookie guide](/guides/cookies) for browser sessions.
+
 ## 2. Create the auth instance
 
 Secrets must be at least 32 characters long. Keep access and refresh secrets
@@ -20,6 +23,13 @@ const auth = createAuth({
   accessExpiresIn: "15m",
   refreshExpiresIn: "7d",
 });
+```
+
+Use separate high-entropy secrets. For local development only:
+
+```bash
+export JWT_ACCESS_SECRET="replace-with-a-random-access-secret-at-least-32-characters"
+export JWT_REFRESH_SECRET="replace-with-a-different-refresh-secret-at-least-32-characters"
 ```
 
 ## 3. Protect routes
@@ -57,4 +67,17 @@ The client sends the access token on protected requests:
 Authorization: Bearer <access-token>
 ```
 
-Next: choose [Bearer tokens](/guides/bearer-tokens) or [HTTP-only cookies](/guides/cookies).
+Check the route with cURL:
+
+```bash
+curl http://localhost:3000/api/profile \
+  -H "Authorization: Bearer <access-token>"
+```
+
+Without a token, the error handler returns `401 AUTH_TOKEN_MISSING`. An
+authenticated user who fails a role or permission check receives
+`403 AUTH_FORBIDDEN`.
+
+Next: choose [Bearer tokens](/guides/bearer-tokens),
+[HTTP-only cookies](/guides/cookies), or review the
+[configuration reference](/configuration).

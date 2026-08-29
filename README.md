@@ -16,7 +16,9 @@ HTTP-only cookies, and RBAC with middleware your team can understand.
 
 **Start here:** [5-minute quick start](#quick-start-5-minutes) · [runnable examples](#examples) · [API reference](#api-reference)
 
-**Documentation:** [zero-auth.netlify.app](https://zero-auth.netlify.app/)
+**Documentation:** [zero-auth.netlify.app](https://zero-auth.netlify.app/) ·
+[guides](https://zero-auth.netlify.app/v1/) ·
+[API reference](https://zero-auth.netlify.app/v1/api/)
 
 [![npm version](https://img.shields.io/npm/v/@0-auth/zero-auth.svg)](https://www.npmjs.com/package/@0-auth/zero-auth)
 [![npm downloads](https://img.shields.io/npm/dm/@0-auth/zero-auth.svg)](https://www.npmjs.com/package/@0-auth/zero-auth)
@@ -188,9 +190,14 @@ Two complete, runnable example projects are included in the [`examples/`](./exam
 | Example | Description | Features |
 | ------- | ----------- | -------- |
 | [`express-rest-api`](./examples/express-rest-api) | Stateless Bearer token API for mobile / CLI / SPA clients | `generateTokenPair`, `protect`, `authorize`, `optional`, `refreshHandler`, `decodeToken` |
-| [`express-cookies-redis`](./examples/express-cookies-redis) | Cookie-based auth with Redis-backed refresh token rotation | `sendAuthTokens`, `clearAuth`, rotation hooks, family revocation, `onRefreshReuse` |
+| [`express-cookies-redis`](./examples/express-cookies-redis) | Cookie-based auth with Redis-backed refresh token rotation | `sendAuthTokens`, `clearAuth`, CSRF, rotation hooks, family revocation, `onRefreshReuse` |
 
 Each example includes a README with setup instructions and cURL commands for every endpoint.
+
+For the complete documentation map, read the
+[documentation site](https://zero-auth.netlify.app/v1/). It covers bearer and
+cookie clients, CSRF, roles and permissions, refresh rotation, errors,
+deployment, testing, versioning, and releases.
 
 ```bash
 # Quick start (REST API example)
@@ -506,7 +513,7 @@ try {
 | `AUTH_TOKEN_INVALID` | `401` | Token is malformed or signature verification failed. |
 | `AUTH_TOKEN_EXPIRED` | `401` | Token has exceeded its expiration time. |
 | `AUTH_UNAUTHORIZED` | `401` | General unauthenticated error (e.g. invalid credentials or missing user state). |
-| `AUTH_FORBIDDEN` | `403` | User is authenticated but does not possess the required role. |
+| `AUTH_FORBIDDEN` | `403` | User is authenticated but does not possess the required role or permission. |
 | `AUTH_CSRF_INVALID` | `403` | Auth cookies are present but the CSRF token is missing or invalid. |
 
 ---
@@ -639,6 +646,10 @@ import {
    - Refresh tokens can have longer lifespans (`7d` - `30d`).
 4. **Token Revocation in Distributed Systems**:
    - Use Redis or your primary database with TTLs to track revoked `jti` identifiers when `refreshOptions.rotate: true` is enabled.
+5. **Abuse Prevention**:
+   - Rate-limit login, registration, refresh, and password-reset endpoints.
+   - Use an allow-listed CORS policy for browser clients.
+   - Monitor authentication failures, refresh replays, and revocation-store errors.
 
 ---
 
@@ -651,6 +662,10 @@ import {
 | **Bun** | >= 1.0.0 | Native runtime support |
 | **TypeScript** | >= 5.0.0 | Declarations bundled |
 | **Serverless / Edge** | ✅ | Powered by `jose` (Web Crypto API compliant) |
+
+The npm tarball includes the README, CHANGELOG, license, compiled ESM/CommonJS
+builds, and TypeScript declarations. The full guide and generated API site are
+built from the repository's `docs/` source.
 
 ---
 
