@@ -98,7 +98,9 @@ describe("Security Audit: Malicious Inputs & Attack Vectors", () => {
     });
 
     it("rejects tokens with invalid non-base64 characters and null bytes", async () => {
-      await expect(auth.verifyToken("invalid\0token.with.nullbytes")).rejects.toThrowError(AuthError);
+      await expect(auth.verifyToken("invalid\0token.with.nullbytes")).rejects.toThrowError(
+        AuthError
+      );
       await expect(auth.verifyToken("!@#$%^&*().!@#$%^&*().!@#$%^&*()")).rejects.toThrowError(
         AuthError
       );

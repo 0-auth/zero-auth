@@ -7,6 +7,9 @@ const DEFAULT_ACCESS_EXPIRES_IN = "15m";
 const DEFAULT_REFRESH_EXPIRES_IN = "7d";
 const DEFAULT_ACCESS_COOKIE_NAME = "access_token";
 const DEFAULT_REFRESH_COOKIE_NAME = "refresh_token";
+const DEFAULT_CSRF_COOKIE_NAME = "csrf_token";
+const DEFAULT_CSRF_HEADER_NAME = "x-csrf-token";
+const DEFAULT_CSRF_METHODS = ["POST", "PUT", "PATCH", "DELETE"];
 
 const DEFAULT_COOKIE_OPTIONS: CookieOptions = {
   httpOnly: true,
@@ -38,14 +41,18 @@ export function resolveConfig(config: AuthConfig): ResolvedConfig {
   validateSecrets(config);
   validateRefreshOptions(config);
 
+  const accessTokenName = config.cookies?.accessTokenName ?? DEFAULT_ACCESS_COOKIE_NAME;
+  const refreshTokenName = config.cookies?.refreshTokenName ?? DEFAULT_REFRESH_COOKIE_NAME;
+  const csrf = resolveCsrfConfig(config, accessTokenName, refreshTokenName);
+
   return {
     accessSecret: config.accessSecret,
     refreshSecret: config.refreshSecret,
     accessExpiresIn: config.accessExpiresIn ?? DEFAULT_ACCESS_EXPIRES_IN,
     refreshExpiresIn: config.refreshExpiresIn ?? DEFAULT_REFRESH_EXPIRES_IN,
     cookies: {
-      accessTokenName: config.cookies?.accessTokenName ?? DEFAULT_ACCESS_COOKIE_NAME,
-      refreshTokenName: config.cookies?.refreshTokenName ?? DEFAULT_REFRESH_COOKIE_NAME,
+      accessTokenName,
+      refreshTokenName,
       options: ((): CookieOptions => {
         const merged: CookieOptions = {
           ...DEFAULT_COOKIE_OPTIONS,
@@ -69,6 +76,7 @@ export function resolveConfig(config: AuthConfig): ResolvedConfig {
         return merged;
       })(),
     },
+    csrf,
     refreshOptions: {
       rotate: config.refreshOptions?.rotate ?? false,
       ...(config.refreshOptions?.consumeRefreshToken
@@ -85,6 +93,36 @@ export function resolveConfig(config: AuthConfig): ResolvedConfig {
         ? { onRefreshReuse: config.refreshOptions.onRefreshReuse }
         : {}),
     },
+  };
+}
+
+function resolveCsrfConfig(
+  config: AuthConfig,
+  accessTokenName: string,
+  refreshTokenName: string
+): ResolvedConfig["csrf"] {
+  const cookieName = config.csrf?.cookieName ?? DEFAULT_CSRF_COOKIE_NAME;
+  const headerName = config.csrf?.headerName ?? DEFAULT_CSRF_HEADER_NAME;
+  const methods = config.csrf?.methods ?? DEFAULT_CSRF_METHODS;
+
+  if (!cookieName.trim() || !headerName.trim()) {
+    throw new Error("[zero-auth] CSRF cookieName and headerName cannot be empty.");
+  }
+  if (cookieName === accessTokenName || cookieName === refreshTokenName) {
+    throw new Error("[zero-auth] CSRF cookieName must differ from auth cookie names.");
+  }
+  if (
+    !Array.isArray(methods) ||
+    methods.length === 0 ||
+    methods.some((method) => typeof method !== "string" || !method.trim())
+  ) {
+    throw new Error("[zero-auth] CSRF methods must contain at least one non-empty method.");
+  }
+
+  return {
+    cookieName,
+    headerName,
+    methods: [...new Set(methods.map((method) => method.trim().toUpperCase()))],
   };
 }
 

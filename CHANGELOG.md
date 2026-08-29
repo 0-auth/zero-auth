@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0 - 2026-08-29
+
+- Add signed double-submit CSRF protection for cookie-authenticated requests.
+- Add `auth.csrf()` middleware and `auth.csrfToken(res)` token setup.
+- Add `auth.authorizePermissions()` middleware for fine-grained access checks.
+- Add the `AUTH_CSRF_INVALID` error code and document the browser/cURL flow.
+
 ## 1.1.3 - 2026-08-25
 
 - Add a prominent README section for breaking changes and upgrade notes.

@@ -53,3 +53,4 @@ When using `@0-auth/zero-auth` in production applications:
 - **HTTPS & Cookies**: Always run your production environment over HTTPS and ensure `cookies.options.secure: true` (enabled automatically when `NODE_ENV === 'production'`).
 - **Token Lifespans**: Keep access token expiration short (`15m` recommended) and handle session continuity via refresh token rotation.
 - **Atomic Refresh Consumption**: If enabling `refreshOptions.rotate`, implement `consumeRefreshToken` with an atomic operation such as Redis `SET NX` so concurrent requests cannot reuse the same refresh token. The legacy split hooks remain for 1.1.x compatibility but are not concurrency-safe.
+- **CSRF**: If using auth cookies, mount `auth.csrf()` before state-changing routes and send the token returned by `auth.csrfToken(res)` in the configured request header.

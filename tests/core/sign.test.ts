@@ -68,8 +68,12 @@ describe("signToken", () => {
       signToken({ id: "u" }, SECRET, "15m"),
     ]);
 
-    const jti1 = JSON.parse(Buffer.from(t1.split(".")[1]!, "base64url").toString("utf-8")) as Record<string, unknown>;
-    const jti2 = JSON.parse(Buffer.from(t2.split(".")[1]!, "base64url").toString("utf-8")) as Record<string, unknown>;
+    const jti1 = JSON.parse(
+      Buffer.from(t1.split(".")[1]!, "base64url").toString("utf-8")
+    ) as Record<string, unknown>;
+    const jti2 = JSON.parse(
+      Buffer.from(t2.split(".")[1]!, "base64url").toString("utf-8")
+    ) as Record<string, unknown>;
 
     expect(jti1["jti"]).not.toBe(jti2["jti"]);
   });

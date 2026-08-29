@@ -42,7 +42,25 @@ const response = await fetch("https://api.example.com/profile", {
 ```
 
 JavaScript cannot read an HTTP-only cookie. Add CSRF protection for
-cookie-authenticated state-changing requests; see the [security checklist](/security).
+cookie-authenticated state-changing requests:
+
+```ts
+app.use(auth.csrf());
+
+const csrfResponse = await fetch("https://api.example.com/auth/csrf-token", {
+  credentials: "include",
+});
+const { csrfToken } = await csrfResponse.json();
+
+await fetch("https://api.example.com/account", {
+  method: "POST",
+  credentials: "include",
+  headers: { "x-csrf-token": csrfToken },
+});
+```
+
+The endpoint should call `auth.csrfToken(res)` to set and return the token.
+Read the [security checklist](/security) before deploying.
 
 ## Axios
 

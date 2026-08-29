@@ -11,6 +11,8 @@ export const AUTH_ERROR_CODES = {
   AUTH_UNAUTHORIZED: "AUTH_UNAUTHORIZED",
   /** The user is authenticated but lacks the required role/permission (403). */
   AUTH_FORBIDDEN: "AUTH_FORBIDDEN",
+  /** The request is missing or has an invalid CSRF token (403). */
+  AUTH_CSRF_INVALID: "AUTH_CSRF_INVALID",
 } as const;
 
 export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[keyof typeof AUTH_ERROR_CODES];
@@ -23,6 +25,7 @@ const STATUS_MAP: Record<AuthErrorCode, number> = {
   AUTH_TOKEN_EXPIRED: 401,
   AUTH_UNAUTHORIZED: 401,
   AUTH_FORBIDDEN: 403,
+  AUTH_CSRF_INVALID: 403,
 };
 
 // ─── AuthError Class ─────────────────────────────────────────────────────────
@@ -90,5 +93,7 @@ function defaultMessage(code: AuthErrorCode): string {
       return "Unauthorized. Please log in.";
     case "AUTH_FORBIDDEN":
       return "Forbidden. You do not have permission to access this resource.";
+    case "AUTH_CSRF_INVALID":
+      return "CSRF token is missing or invalid.";
   }
 }

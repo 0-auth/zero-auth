@@ -23,7 +23,12 @@ app.use(express.json());
 // Simulated user store.
 const USERS = {
   "user@example.com": { id: "user-1", email: "user@example.com", role: "user", password: "pass" },
-  "admin@example.com": { id: "admin-1", email: "admin@example.com", role: "admin", password: "pass" },
+  "admin@example.com": {
+    id: "admin-1",
+    email: "admin@example.com",
+    role: "admin",
+    password: "pass",
+  },
 };
 
 // ── Auth Routes ───────────────────────────────────────────────────────────────
@@ -128,18 +133,14 @@ describe("Express Integration", () => {
     });
 
     it("returns the user for a valid Bearer token", async () => {
-      const res = await request(app)
-        .get("/profile")
-        .set("Authorization", `Bearer ${accessToken}`);
+      const res = await request(app).get("/profile").set("Authorization", `Bearer ${accessToken}`);
 
       expect(res.status).toBe(200);
       expect(res.body.user).toMatchObject({ id: "user-1", email: "user@example.com" });
     });
 
     it("returns 401 for an invalid token", async () => {
-      const res = await request(app)
-        .get("/profile")
-        .set("Authorization", "Bearer invalid.token");
+      const res = await request(app).get("/profile").set("Authorization", "Bearer invalid.token");
 
       expect(res.status).toBe(401);
       expect(res.body).toHaveProperty("error.code", "AUTH_TOKEN_INVALID");
@@ -160,18 +161,14 @@ describe("Express Integration", () => {
     });
 
     it("returns 200 for an admin user", async () => {
-      const res = await request(app)
-        .get("/admin")
-        .set("Authorization", `Bearer ${adminToken}`);
+      const res = await request(app).get("/admin").set("Authorization", `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
       expect(res.body.message).toBe("Admin area");
     });
 
     it("returns 403 for a non-admin user", async () => {
-      const res = await request(app)
-        .get("/admin")
-        .set("Authorization", `Bearer ${userToken}`);
+      const res = await request(app).get("/admin").set("Authorization", `Bearer ${userToken}`);
 
       expect(res.status).toBe(403);
       expect(res.body).toHaveProperty("error.code", "AUTH_FORBIDDEN");
@@ -226,9 +223,7 @@ describe("Express Integration", () => {
         .send({ email: "user@example.com", password: "pass" });
       const { accessToken } = loginRes.body as { accessToken: string };
 
-      const res = await request(app)
-        .get("/public")
-        .set("Authorization", `Bearer ${accessToken}`);
+      const res = await request(app).get("/public").set("Authorization", `Bearer ${accessToken}`);
 
       expect(res.status).toBe(200);
       expect(res.body.authenticated).toBe(true);
@@ -236,9 +231,7 @@ describe("Express Integration", () => {
     });
 
     it("returns authenticated: false when an invalid token is provided (silent fail)", async () => {
-      const res = await request(app)
-        .get("/public")
-        .set("Authorization", "Bearer broken.token");
+      const res = await request(app).get("/public").set("Authorization", "Bearer broken.token");
 
       expect(res.status).toBe(200);
       expect(res.body.authenticated).toBe(false);

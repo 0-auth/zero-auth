@@ -21,9 +21,9 @@ describe("verifyToken", () => {
     const token = await signToken({ id: "user-1" }, SECRET, "15m");
     // Tamper with the payload section.
     const parts = token.split(".");
-    const tamperedPayload = Buffer.from(
-      JSON.stringify({ id: "hacker", role: "admin" })
-    ).toString("base64url");
+    const tamperedPayload = Buffer.from(JSON.stringify({ id: "hacker", role: "admin" })).toString(
+      "base64url"
+    );
     const tampered = [parts[0], tamperedPayload, parts[2]].join(".");
 
     await expect(verifyToken(tampered, SECRET)).rejects.toMatchObject({

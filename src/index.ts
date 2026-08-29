@@ -2,21 +2,19 @@ import type { RequestHandler, ErrorRequestHandler, Response } from "express";
 
 import { createJwtEngine } from "./core/jwt.js";
 import { createProtectMiddleware } from "./middleware/protect.js";
-import { createAuthorizeMiddleware } from "./middleware/authorize.js";
+import {
+  createAuthorizeMiddleware,
+  createAuthorizePermissionsMiddleware,
+} from "./middleware/authorize.js";
 import { createOptionalMiddleware } from "./middleware/optional.js";
+import { createCsrfMiddleware, createCsrfToken } from "./middleware/csrf.js";
 import { createRefreshHandler, createRotateTokens } from "./refresh/refresh.js";
 import { setCookie } from "./cookies/setCookie.js";
 import { clearCookie } from "./cookies/clearCookie.js";
 import { authErrorHandler } from "./errors/errorHandler.js";
 import { resolveConfig, parseExpiryToSeconds, withFamilyId } from "./utils/helpers.js";
 
-import type {
-  AuthConfig,
-  JwtPayload,
-  AuthUser,
-  TokenPair,
-  ResolvedConfig,
-} from "./types/auth.js";
+import type { AuthConfig, JwtPayload, AuthUser, TokenPair, ResolvedConfig } from "./types/auth.js";
 
 // ─── Auth Instance Interface ─────────────────────────────────────────────────
 
@@ -76,11 +74,24 @@ export interface AuthInstance {
   authorize(allowedRoles: string[]): RequestHandler;
 
   /**
+   * Middleware: requires every listed permission. Must run after `protect()`.
+   * Rejects requests where `req.user.permissions` is missing a permission with 403.
+   * @example `app.get("/users", auth.protect(), auth.authorizePermissions(["users:read"]), handler);`
+   */
+  authorizePermissions(requiredPermissions: string[]): RequestHandler;
+
+  /**
    * Middleware: optionally authenticates. Never rejects — populates `req.user`
    * if a valid token is present, otherwise continues as a guest.
    * @example `app.get("/posts", auth.optional(), postsHandler);`
    */
   optional(): RequestHandler;
+
+  /**
+   * Middleware: validates CSRF tokens on configured methods when auth cookies
+   * are present. Mount before state-changing routes.
+   */
+  csrf(): RequestHandler;
 
   // ── Cookie Helpers ─────────────────────────────────────────────────────────
 
@@ -95,6 +106,9 @@ export interface AuthInstance {
    * Clears both auth cookies from the response. Use on logout.
    */
   clearAuth(res: Response): void;
+
+  /** Sets and returns a client-readable CSRF token for cookie-authenticated clients. */
+  csrfToken(res: Response): string;
 
   // ── Refresh ────────────────────────────────────────────────────────────────
 
@@ -164,15 +178,11 @@ export function createAuth(config: AuthConfig): AuthInstance {
     },
 
     generateRefreshToken(payload: JwtPayload) {
-      return engine.generateRefreshToken(
-        withFamilyId(payload, resolved.refreshOptions.rotate)
-      );
+      return engine.generateRefreshToken(withFamilyId(payload, resolved.refreshOptions.rotate));
     },
 
     generateTokenPair(payload: JwtPayload) {
-      return engine.generateTokenPair(
-        withFamilyId(payload, resolved.refreshOptions.rotate)
-      );
+      return engine.generateTokenPair(withFamilyId(payload, resolved.refreshOptions.rotate));
     },
 
     verifyToken(token: string) {
@@ -197,8 +207,16 @@ export function createAuth(config: AuthConfig): AuthInstance {
       return createAuthorizeMiddleware(allowedRoles);
     },
 
+    authorizePermissions(requiredPermissions: string[]) {
+      return createAuthorizePermissionsMiddleware(requiredPermissions);
+    },
+
     optional() {
       return createOptionalMiddleware(engine, resolved);
+    },
+
+    csrf() {
+      return createCsrfMiddleware(resolved);
     },
 
     // ── Cookie Helpers ───────────────────────────────────────────────────────
@@ -226,6 +244,10 @@ export function createAuth(config: AuthConfig): AuthInstance {
       clearCookie(res, resolved.cookies.refreshTokenName, resolved.cookies.options);
     },
 
+    csrfToken(res: Response): string {
+      return createCsrfToken(res, resolved);
+    },
+
     // ── Refresh ──────────────────────────────────────────────────────────────
 
     refreshHandler() {
@@ -248,6 +270,7 @@ export function createAuth(config: AuthConfig): AuthInstance {
 export type {
   AuthConfig,
   CookieConfig,
+  CsrfConfig,
   JwtPayload,
   AuthUser,
   TokenPair,

@@ -9,7 +9,12 @@ import type { CookieOptions } from "../types/cookies.js";
  * @param value - Cookie value (e.g. a JWT string).
  * @param options - Cookie options (httpOnly is always enforced as true).
  */
-export function setCookie(res: Response, name: string, value: string, options: CookieOptions = {}): void {
+export function setCookie(
+  res: Response,
+  name: string,
+  value: string,
+  options: CookieOptions = {}
+): void {
   const {
     httpOnly = true,
     secure = process.env["NODE_ENV"] === "production",

@@ -22,6 +22,22 @@ app.get(
 
 `authorize()` checks `req.user.role` and allows a user with any listed role.
 
+## Permission-based access control
+
+Use `authorizePermissions()` for fine-grained checks. The user must have every
+listed permission in the JWT `permissions` claim.
+
+```ts
+app.get(
+  "/users",
+  auth.protect(),
+  auth.authorizePermissions(["users:read"]),
+  listUsersHandler,
+);
+```
+
+It returns `AUTH_FORBIDDEN` when a required permission is missing.
+
 ## Optional authentication
 
 Use `optional()` when guests and signed-in users can both access an endpoint.

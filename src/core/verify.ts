@@ -20,7 +20,10 @@ export async function verifyToken(token: string, secret: string): Promise<AuthUs
 
     // Ensure the `id` claim is present (required by JwtPayload).
     if (typeof payload["id"] !== "string") {
-      throw new AuthError("AUTH_TOKEN_INVALID", "Token payload is missing the required `id` claim.");
+      throw new AuthError(
+        "AUTH_TOKEN_INVALID",
+        "Token payload is missing the required `id` claim."
+      );
     }
 
     return payload as AuthUser;
@@ -30,7 +33,11 @@ export async function verifyToken(token: string, secret: string): Promise<AuthUs
     // jose may throw platform-specific error classes; fall back to checking `name`.
     const errName = (err as { name?: string } | null)?.name;
 
-    if (err instanceof joseErrors.JWTExpired || errName === "JWTExpired" || errName === "TokenExpiredError") {
+    if (
+      err instanceof joseErrors.JWTExpired ||
+      errName === "JWTExpired" ||
+      errName === "TokenExpiredError"
+    ) {
       throw new AuthError("AUTH_TOKEN_EXPIRED");
     }
 

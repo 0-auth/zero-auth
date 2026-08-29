@@ -141,6 +141,7 @@ const app = express();
 app.disable("x-powered-by");
 if (isProduction) app.set("trust proxy", 1);
 app.use(express.json());
+app.use(auth.csrf());
 
 app.get("/healthz", async (_req, res) => {
   try {
@@ -215,6 +216,10 @@ app.post("/auth/login", async (req, res) => {
 app.post("/auth/logout", (_req, res) => {
   auth.clearAuth(res);
   res.json({ message: "Logged out" });
+});
+
+app.get("/auth/csrf-token", (_req, res) => {
+  res.json({ csrfToken: auth.csrfToken(res) });
 });
 
 // ── Public: Refresh (cookies auto-update on rotation) ────────────────────────

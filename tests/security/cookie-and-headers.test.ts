@@ -43,9 +43,15 @@ describe("Security Audit: Cookie & Header Extraction Safety", () => {
     });
 
     it("ignores empty Bearer tokens or whitespace tokens", () => {
-      expect(extractToken({ headers: { authorization: "Bearer " } } as unknown as Request)).toBeNull();
-      expect(extractToken({ headers: { authorization: "Bearer    " } } as unknown as Request)).toBeNull();
-      expect(extractToken({ headers: { authorization: "Bearer" } } as unknown as Request)).toBeNull();
+      expect(
+        extractToken({ headers: { authorization: "Bearer " } } as unknown as Request)
+      ).toBeNull();
+      expect(
+        extractToken({ headers: { authorization: "Bearer    " } } as unknown as Request)
+      ).toBeNull();
+      expect(
+        extractToken({ headers: { authorization: "Bearer" } } as unknown as Request)
+      ).toBeNull();
     });
 
     it("prefers Bearer header over cookie for access tokens", () => {
@@ -77,7 +83,9 @@ describe("Security Audit: Cookie & Header Extraction Safety", () => {
           refreshToken: "body-refresh",
         },
       };
-      expect(extractRefreshToken(req as unknown as Request, "refresh_token")).toBe("cookie-refresh");
+      expect(extractRefreshToken(req as unknown as Request, "refresh_token")).toBe(
+        "cookie-refresh"
+      );
     });
   });
 

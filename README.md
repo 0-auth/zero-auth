@@ -9,10 +9,10 @@ HTTP-only cookies, and RBAC with middleware your team can understand.
 
 > [!NOTE]
 > Any release with breaking changes will list them in this section before the
-> rest of the README. For `1.1.2`, legacy `isRevoked` + `revokeRefreshToken`
-> hooks still work but emit a warning and are not concurrency-safe. Use the
-> atomic `consumeRefreshToken` hook for rotated refresh tokens, especially in
-> multi-instance deployments.
+> rest of the README. Legacy `isRevoked` + `revokeRefreshToken` hooks remain
+> supported for compatibility, but emit a warning and are not concurrency-safe.
+> Use the atomic `consumeRefreshToken` hook for rotated refresh tokens,
+> especially in multi-instance deployments.
 
 **Start here:** [5-minute quick start](#quick-start-5-minutes) · [runnable examples](#examples) · [API reference](#api-reference)
 
@@ -39,9 +39,10 @@ HTTP-only cookies, and RBAC with middleware your team can understand.
 - [Quick Start (5 Minutes)](#quick-start-5-minutes)
 - [Examples](#examples)
 - [Configuration Options](#configuration-options)
-- [Usage Guides](#usage-guides)
+  - [Usage Guides](#usage-guides)
   - [1. Header / Bearer Token Auth](#1-header--bearer-token-auth)
   - [2. HTTP-Only Cookie Auth](#2-http-only-cookie-auth)
+  - [CSRF Protection for Cookie Auth](#csrf-protection-for-cookie-auth)
   - [3. Route Protection & RBAC](#3-route-protection--rbac)
   - [4. Optional Authentication](#4-optional-authentication)
   - [5. Token Refresh & Rotation](#5-token-refresh--rotation)
@@ -62,8 +63,10 @@ HTTP-only cookies, and RBAC with middleware your team can understand.
 - ⚡ **Zero-Boilerplate Setup**: Initialize with `createAuth()` and start securing routes immediately.
 - 🔒 **Secure by Default**: Cryptographically signed tokens (HS256 via [jose](https://github.com/panva/jose)), enforced minimum 32-character secret length.
 - 🍪 **Built-in Cookie Support**: Seamless HTTP-only cookie handling without extra cookie middleware dependencies.
+- 🛡️ **Cookie CSRF Protection**: Signed double-submit middleware for state-changing cookie requests.
 - 🔄 **Automatic Token Refresh & Rotation**: Built-in refresh route handler with optional token family reuse detection.
 - 🛡️ **Role-Based Access Control (RBAC)**: Flexible role-checking middleware (`auth.authorize(['admin', 'editor'])`).
+- 🔑 **Permission-Based Access Control**: Require fine-grained permissions with `auth.authorizePermissions(['users:read'])`.
 - 🧩 **First-Class TypeScript**: Automatic `req.user` typing via declaration merging with support for custom claims.
 - 🛑 **Structured Error Handling**: Standardized `AuthError` class with typed error codes (`AUTH_TOKEN_EXPIRED`, `AUTH_FORBIDDEN`, etc.).
 - 🌐 **Modern & Edge-Ready**: Dual ESM & CommonJS builds, Node 18+, Bun, serverless, and edge runtime compatible.
@@ -225,6 +228,13 @@ const auth = createAuth({
     },
   },
 
+  // Optional CSRF protection for cookie-authenticated requests
+  csrf: {
+    cookieName: "csrf_token",       // Client-readable token cookie
+    headerName: "x-csrf-token",     // Header copied from that cookie
+    methods: ["POST", "PUT", "PATCH", "DELETE"],
+  },
+
   // Optional Refresh Rotation & Revocation
   refreshOptions: {
     rotate: false,           // Set to true to enable Refresh Token Rotation
@@ -289,6 +299,44 @@ app.post("/auth/logout", (req, res) => {
 });
 ```
 
+### CSRF Protection for Cookie Auth
+
+Cookie-authenticated state-changing requests should include a CSRF token. Add
+the middleware before your routes and expose a small same-origin endpoint that
+sets and returns the client-readable token:
+
+```ts
+app.use(auth.csrf());
+
+app.get("/auth/csrf-token", (req, res) => {
+  res.json({ csrfToken: auth.csrfToken(res) });
+});
+
+app.post("/api/profile", auth.protect(), (req, res) => {
+  res.json({ updated: true, user: req.user });
+});
+```
+
+The browser sends the token in the configured header on `POST`, `PUT`, `PATCH`,
+and `DELETE` requests:
+
+```ts
+const { csrfToken } = await fetch("/auth/csrf-token", {
+  credentials: "include",
+}).then((response) => response.json());
+
+await fetch("/api/profile", {
+  method: "POST",
+  credentials: "include",
+  headers: { "x-csrf-token": csrfToken },
+});
+```
+
+Requests without auth cookies and safe methods such as `GET` pass through. The
+middleware does not protect bearer-token requests because browsers do not send
+their `Authorization` header automatically. Mount `app.use(auth.csrf())`
+before state-changing routes, and keep `app.use(auth.errorHandler)` last.
+
 ---
 
 ### 3. Route Protection & RBAC
@@ -309,6 +357,21 @@ app.get(
 ```
 
 > **Note:** `auth.authorize()` checks `req.user.role`. Always place `auth.protect()` before `auth.authorize()` in the middleware chain.
+
+For fine-grained access checks, require every permission listed in the user's
+`permissions` claim:
+
+```ts
+app.get(
+  "/users",
+  auth.protect(),
+  auth.authorizePermissions(["users:read"]),
+  listUsersHandler
+);
+```
+
+`auth.authorizePermissions()` also requires `auth.protect()` first and returns
+`AUTH_FORBIDDEN` when any required permission is missing.
 
 ---
 
@@ -444,6 +507,7 @@ try {
 | `AUTH_TOKEN_EXPIRED` | `401` | Token has exceeded its expiration time. |
 | `AUTH_UNAUTHORIZED` | `401` | General unauthenticated error (e.g. invalid credentials or missing user state). |
 | `AUTH_FORBIDDEN` | `403` | User is authenticated but does not possess the required role. |
+| `AUTH_CSRF_INVALID` | `403` | Auth cookies are present but the CSRF token is missing or invalid. |
 
 ---
 
@@ -502,9 +566,12 @@ Created via `const auth = createAuth(config)`:
 | `decodeToken(token)` | `AuthUser` | Decodes a token **without** verifying signature. |
 | `protect()` | `RequestHandler` | Express middleware: rejects requests without valid access token (401). |
 | `authorize(roles)` | `RequestHandler` | Express middleware: ensures `req.user.role` is in allowed roles (403). |
+| `authorizePermissions(permissions)` | `RequestHandler` | Express middleware: requires every listed permission in `req.user.permissions` (403). |
 | `optional()` | `RequestHandler` | Express middleware: sets `req.user` if valid token present, allows guests. |
+| `csrf()` | `RequestHandler` | Express middleware: validates CSRF tokens on configured methods when auth cookies are present. |
 | `sendAuthTokens(res, payload)` | `Promise<TokenPair>` | Sets access + refresh HTTP-only cookies on `res` and returns tokens. |
 | `clearAuth(res)` | `void` | Clears access and refresh auth cookies from `res`. |
+| `csrfToken(res)` | `string` | Sets and returns a client-readable signed CSRF token. |
 | `refreshHandler()` | `RequestHandler` | Express route handler for refreshing access tokens. |
 | `rotateTokens(payload)` | `Promise<TokenPair>` | Generates a new access + refresh pair (for custom rotation logic). |
 | `errorHandler` | `ErrorRequestHandler` | Express error middleware for handling `AuthError` responses. |
@@ -566,6 +633,7 @@ import {
 2. **HTTPS & Cookies**:
    - In production (`NODE_ENV=production`), `secure: true` is automatically enabled on cookies so tokens are only transmitted over HTTPS.
    - HTTP-only cookies prevent client-side JavaScript access, neutralizing XSS token theft.
+   - Mount `auth.csrf()` for cookie-authenticated state-changing requests and send the token in the configured header.
 3. **Token Lifespans**:
    - Keep `accessExpiresIn` short (`15m` recommended).
    - Refresh tokens can have longer lifespans (`7d` - `30d`).

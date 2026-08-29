@@ -10,12 +10,16 @@ describe("Cookie utilities (setCookie & clearCookie)", () => {
 
     setCookie(res, "auth_token", "jwt-value", { maxAge: 900 });
 
-    expect(cookieSpy).toHaveBeenCalledWith("auth_token", "jwt-value", expect.objectContaining({
-      httpOnly: true,
-      path: "/",
-      sameSite: "lax",
-      maxAge: 900000, // converted to ms
-    }));
+    expect(cookieSpy).toHaveBeenCalledWith(
+      "auth_token",
+      "jwt-value",
+      expect.objectContaining({
+        httpOnly: true,
+        path: "/",
+        sameSite: "lax",
+        maxAge: 900000, // converted to ms
+      })
+    );
   });
 
   it("clearCookie accepts options object and passes matching domain/path", () => {
@@ -39,9 +43,12 @@ describe("Cookie utilities (setCookie & clearCookie)", () => {
 
     clearCookie(res, "auth_token", "/custom-path");
 
-    expect(clearCookieSpy).toHaveBeenCalledWith("auth_token", expect.objectContaining({
-      path: "/custom-path",
-      httpOnly: true,
-    }));
+    expect(clearCookieSpy).toHaveBeenCalledWith(
+      "auth_token",
+      expect.objectContaining({
+        path: "/custom-path",
+        httpOnly: true,
+      })
+    );
   });
 });

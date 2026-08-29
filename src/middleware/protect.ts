@@ -22,10 +22,7 @@ import { logger } from "../utils/logger.js";
  * });
  * ```
  */
-export function createProtectMiddleware(
-  engine: JwtEngine,
-  config: ResolvedConfig
-): RequestHandler {
+export function createProtectMiddleware(engine: JwtEngine, config: ResolvedConfig): RequestHandler {
   return function protect(req: Request, _res: Response, next: NextFunction): void {
     const cookieName = config.cookies.accessTokenName;
     const token = extractToken(req, cookieName);

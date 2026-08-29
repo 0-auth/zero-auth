@@ -93,9 +93,9 @@ client-supplied admin role, and keeps users in memory so the example stays
 small. Replace the `users` array with your database before production; user
 registrations disappear when the process restarts or a container is replaced.
 
-For a real browser application, also add login/refresh rate limits, CSRF or
-strict origin protection for cookie-authenticated writes, an allow-listed CORS
-policy, HTTPS, and a trusted reverse-proxy configuration.
+The example includes CSRF protection for cookie-authenticated writes. For a
+real browser application, also add login/refresh rate limits, an allow-listed
+CORS policy, HTTPS, and a trusted reverse-proxy configuration.
 
 ## Seed Users
 
@@ -119,7 +119,20 @@ curl -X POST http://localhost:3001/auth/login \
 
 Check `cookies.txt` — you'll see `access_token` and `refresh_token` cookies.
 
-### 2. Access Protected Route (via cookies)
+### 2. Get a CSRF Token
+
+The endpoint sets a client-readable `csrf_token` cookie and returns the same
+signed token. Keep the auth cookies HTTP-only; send this token in the
+`x-csrf-token` header for state-changing requests.
+
+```bash
+curl http://localhost:3001/auth/csrf-token \
+  -b cookies.txt -c cookies.txt
+```
+
+Copy the `csrfToken` value from the response for the next commands.
+
+### 3. Access Protected Route (via cookies)
 
 ```bash
 curl http://localhost:3001/profile -b cookies.txt
@@ -132,32 +145,36 @@ curl http://localhost:3001/profile -b cookies.txt
 }
 ```
 
-### 3. Refresh Token (rotation)
+### 4. Refresh Token (rotation)
 
 ```bash
 curl -X POST http://localhost:3001/auth/refresh \
+  -H "x-csrf-token: <csrfToken>" \
   -b cookies.txt -c cookies.txt
 ```
 
 This rotates the refresh token — the old one is revoked in Redis and new
 cookies are set. Check `cookies.txt` to see the updated values.
 
-### 4. Replay the Old Refresh Token (reuse detection)
+### 5. Replay the Old Refresh Token (reuse detection)
 
 If you saved the old `cookies.txt` before step 3 and replay it:
 
 ```bash
 curl -X POST http://localhost:3001/auth/refresh \
+  -H "x-csrf-token: <csrfToken>" \
   -b old-cookies.txt -c old-cookies.txt
 ```
 
 **Result**: `401` — the server detects reuse, logs a warning, and revokes the
 **entire token family**. Even the new refresh token from step 3 is now invalid.
 
-### 5. Logout (clears cookies)
+### 6. Logout (clears cookies)
 
 ```bash
-curl -X POST http://localhost:3001/auth/logout -b cookies.txt -c cookies.txt
+curl -X POST http://localhost:3001/auth/logout \
+  -H "x-csrf-token: <csrfToken>" \
+  -b cookies.txt -c cookies.txt
 ```
 
 **Response** `200`:
@@ -165,7 +182,7 @@ curl -X POST http://localhost:3001/auth/logout -b cookies.txt -c cookies.txt
 { "message": "Logged out" }
 ```
 
-### 6. Optional Auth
+### 7. Optional Auth
 
 ```bash
 # As guest
@@ -175,10 +192,12 @@ curl http://localhost:3001/posts
 curl http://localhost:3001/posts -b cookies.txt
 ```
 
-### 7. Admin-Only: Delete User
+### 8. Admin-Only: Delete User
 
 ```bash
-curl -X DELETE http://localhost:3001/admin/users/2 -b cookies.txt
+curl -X DELETE http://localhost:3001/admin/users/2 \
+  -H "x-csrf-token: <csrfToken>" \
+  -b cookies.txt
 ```
 
 ---
@@ -204,6 +223,7 @@ curl -X DELETE http://localhost:3001/admin/users/2 -b cookies.txt
 | `createAuth()` + cookies     | Auth initialization with cookie config          |
 | `sendAuthTokens(res, user)`  | Register & Login (sets HTTP-only cookies)        |
 | `clearAuth(res)`             | Logout (clears cookies)                         |
+| `csrf()` + `csrfToken(res)`  | CSRF protection for cookie-authenticated writes |
 | `refreshHandler()` + rotate  | `POST /auth/refresh` (rotation + new cookies)   |
 | `consumeRefreshToken` hook   | Atomic Redis single-use check before issuing pair |
 | `registerRefreshToken` hook  | Tracks new jti under family in Redis            |

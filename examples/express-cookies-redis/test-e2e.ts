@@ -64,9 +64,31 @@ async function runTests() {
     const cookieHeader = setCookieHeaders.map((c) => c.split(";")[0]).join("; ");
     console.log("Cookie header for subsequent requests:", cookieHeader);
 
-    console.log("\n--- 4. Testing Protected Profile (using Cookie) ---");
-    const profileRes = await fetch(`${baseUrl}/profile`, {
+    console.log("\n--- 4. Testing CSRF Token ---");
+    const csrfRes = await fetch(`${baseUrl}/auth/csrf-token`, {
       headers: { Cookie: cookieHeader },
+    });
+    const csrfData = (await csrfRes.json()) as { csrfToken?: string };
+    const csrfCookies = csrfRes.headers.getSetCookie
+      ? csrfRes.headers.getSetCookie()
+      : [csrfRes.headers.get("set-cookie") || ""];
+    const csrfCookieHeader = csrfCookies.map((c) => c.split(";")[0]).join("; ");
+    if (csrfRes.status !== 200 || !csrfData.csrfToken || !csrfCookieHeader) {
+      throw new Error("CSRF token setup failed");
+    }
+    const cookieHeaderWithCsrf = `${cookieHeader}; ${csrfCookieHeader}`;
+    console.log("CSRF status:", csrfRes.status);
+
+    const missingCsrfRes = await fetch(`${baseUrl}/auth/refresh`, {
+      method: "POST",
+      headers: { Cookie: cookieHeader },
+    });
+    if (missingCsrfRes.status !== 403) throw new Error("Missing CSRF token was accepted");
+    console.log("Missing CSRF rejection: PASS");
+
+    console.log("\n--- 5. Testing Protected Profile (using Cookie) ---");
+    const profileRes = await fetch(`${baseUrl}/profile`, {
+      headers: { Cookie: cookieHeaderWithCsrf },
     });
     const profileData = (await profileRes.json()) as any;
     console.log("Profile status:", profileRes.status);
@@ -74,10 +96,10 @@ async function runTests() {
     if (profileRes.status !== 200 || profileData.user.id !== "1")
       throw new Error("Cookie profile failed");
 
-    console.log("\n--- 5. Testing Refresh Token Rotation via Cookie ---");
+    console.log("\n--- 6. Testing Refresh Token Rotation via Cookie ---");
     const refreshRes = await fetch(`${baseUrl}/auth/refresh`, {
       method: "POST",
-      headers: { Cookie: cookieHeader },
+      headers: { Cookie: cookieHeaderWithCsrf, "x-csrf-token": csrfData.csrfToken },
     });
     const refreshData = (await refreshRes.json()) as any;
     const rotatedCookies = refreshRes.headers.getSetCookie
@@ -89,17 +111,20 @@ async function runTests() {
 
     const rotatedCookieHeader = rotatedCookies.map((c) => c.split(";")[0]).join("; ");
 
-    console.log("\n--- 6. Testing Profile with New Rotated Cookie ---");
+    console.log("\n--- 7. Testing Profile with New Rotated Cookie ---");
     const profileAfterRotate = await fetch(`${baseUrl}/profile`, {
-      headers: { Cookie: rotatedCookieHeader },
+      headers: { Cookie: `${rotatedCookieHeader}; ${csrfCookieHeader}` },
     });
     console.log("Profile status with rotated cookie:", profileAfterRotate.status);
     if (profileAfterRotate.status !== 200) throw new Error("Rotated cookie failed");
 
-    console.log("\n--- 7. Testing Logout (Clears Cookies) ---");
+    console.log("\n--- 8. Testing Logout (Clears Cookies) ---");
     const logoutRes = await fetch(`${baseUrl}/auth/logout`, {
       method: "POST",
-      headers: { Cookie: rotatedCookieHeader },
+      headers: {
+        Cookie: `${rotatedCookieHeader}; ${csrfCookieHeader}`,
+        "x-csrf-token": csrfData.csrfToken,
+      },
     });
     const logoutCookies = logoutRes.headers.getSetCookie
       ? logoutRes.headers.getSetCookie()

@@ -50,3 +50,55 @@ export function createAuthorizeMiddleware(allowedRoles: string[]): RequestHandle
     next();
   };
 }
+
+/**
+ * Returns an Express middleware that requires every listed user permission.
+ *
+ * Must be used **after** `auth.protect()` so that `req.user` is already set.
+ * Throws `AUTH_FORBIDDEN` (403) when any permission is missing.
+ *
+ * @param requiredPermissions - Permission strings the user must have.
+ *
+ * @example
+ * ```ts
+ * app.get(
+ *   "/users",
+ *   auth.protect(),
+ *   auth.authorizePermissions(["users:read"]),
+ *   listUsersHandler
+ * );
+ * ```
+ */
+export function createAuthorizePermissionsMiddleware(
+  requiredPermissions: string[]
+): RequestHandler {
+  if (requiredPermissions.length === 0) {
+    throw new Error("[zero-auth] `authorizePermissions()` requires at least one permission.");
+  }
+
+  return function authorizePermissions(req: Request, _res: Response, next: NextFunction): void {
+    const user = req.user;
+
+    if (!user) {
+      logger.warn(
+        "authorizePermissions: called without req.user set — is auth.protect() mounted first?"
+      );
+      next(new AuthError("AUTH_UNAUTHORIZED"));
+      return;
+    }
+
+    const userPermissions = user.permissions;
+
+    if (
+      !Array.isArray(userPermissions) ||
+      !requiredPermissions.every((permission) => userPermissions.includes(permission))
+    ) {
+      logger.debug(`authorizePermissions: missing permission for user ${user.id}`);
+      next(new AuthError("AUTH_FORBIDDEN"));
+      return;
+    }
+
+    logger.debug(`authorizePermissions: user ${user.id} authorized`);
+    next();
+  };
+}

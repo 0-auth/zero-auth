@@ -16,6 +16,8 @@ export interface AuthConfig {
   refreshExpiresIn?: string;
   /** Cookie configuration. If provided, token cookies are enabled. */
   cookies?: CookieConfig;
+  /** Optional CSRF protection for cookie-authenticated state-changing requests. */
+  csrf?: CsrfConfig;
   /** Optional refresh behavior configuration */
   refreshOptions?: {
     /**
@@ -83,6 +85,16 @@ export interface CookieConfig {
   options?: CookieOptions;
 }
 
+/** Configuration for the signed double-submit CSRF middleware. */
+export interface CsrfConfig {
+  /** Client-readable CSRF cookie name. @default "csrf_token" */
+  cookieName?: string;
+  /** Header carrying the token copied from the CSRF cookie. @default "x-csrf-token" */
+  headerName?: string;
+  /** HTTP methods to protect. @default ["POST", "PUT", "PATCH", "DELETE"] */
+  methods?: string[];
+}
+
 // ─── Resolved Internal Config ────────────────────────────────────────────────
 
 /**
@@ -94,6 +106,11 @@ export interface ResolvedConfig {
   accessExpiresIn: string;
   refreshExpiresIn: string;
   cookies: Required<CookieConfig> & { options: CookieOptions };
+  csrf: {
+    cookieName: string;
+    headerName: string;
+    methods: string[];
+  };
   refreshOptions: {
     rotate: boolean;
     consumeRefreshToken?: (oldJti: string, ctx?: RefreshTokenContext) => Promise<boolean> | boolean;
