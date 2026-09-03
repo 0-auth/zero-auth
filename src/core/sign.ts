@@ -1,5 +1,5 @@
 import { SignJWT } from "jose";
-import type { JwtPayload } from "../types/auth.js";
+import type { JwtPayload, JwtValidationConfig } from "../types/auth.js";
 import { parseExpiryToSeconds } from "../utils/helpers.js";
 
 /**
@@ -8,21 +8,27 @@ import { parseExpiryToSeconds } from "../utils/helpers.js";
  * @param payload - Application-level claims to embed.
  * @param secret - Signing secret (UTF-8 string).
  * @param expiresIn - Expiry string in zeit/ms format (e.g. "15m", "7d").
+ * @param options - Optional issuer and audience claims.
  * @returns A compact JWT string.
  */
 export async function signToken(
   payload: JwtPayload,
   secret: string,
-  expiresIn: string
+  expiresIn: string,
+  options?: JwtValidationConfig
 ): Promise<string> {
   const secretKey = new TextEncoder().encode(secret);
 
-  const jwt = await new SignJWT({ ...payload })
+  let builder = new SignJWT({ ...payload })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setIssuedAt()
     .setExpirationTime(Math.floor(Date.now() / 1000) + parseExpiryToSeconds(expiresIn))
-    .setJti(generateJti())
-    .sign(secretKey);
+    .setJti(generateJti());
+
+  if (options?.issuer !== undefined) builder = builder.setIssuer(options.issuer);
+  if (options?.audience !== undefined) builder = builder.setAudience(options.audience);
+
+  const jwt = await builder.sign(secretKey);
 
   return jwt;
 }

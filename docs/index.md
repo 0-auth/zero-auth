@@ -5,7 +5,7 @@ titleTemplate: false
 hero:
   name: zero-auth
   text: Authentication without the auth platform
-  tagline: JWTs, refresh rotation, secure cookies, CSRF, and access control for Node.js APIs.
+  tagline: JWTs, refresh rotation, secure cookies, CSRF, access control, and token validation for Node.js APIs.
   actions:
     - theme: brand
       text: Start building
@@ -19,13 +19,13 @@ features:
     details: One createAuth call, familiar Express middleware, and TypeScript-first types.
   - icon: "02"
     title: Secure token lifecycle
-    details: Short-lived access tokens, refresh rotation, revocation hooks, and reuse detection.
+    details: Short-lived access tokens, refresh rotation, atomic refresh-store consumption, and reuse detection.
   - icon: "03"
     title: Secure browser sessions
     details: HTTP-only cookies with signed double-submit CSRF protection for state-changing requests.
   - icon: "04"
     title: Bring your own storage
-    details: No hosted auth platform or user database. Connect your own store and deployment.
+    details: No hosted auth platform or user database. Connect a Redis/database RefreshTokenStore for shared rotation state.
 ---
 
 <div class="home-intro">

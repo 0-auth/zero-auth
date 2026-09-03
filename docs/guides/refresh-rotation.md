@@ -40,39 +40,37 @@ const store = createInMemoryRevocationStore();
 const auth = createAuth({
   accessSecret: process.env.JWT_ACCESS_SECRET!,
   refreshSecret: process.env.JWT_REFRESH_SECRET!,
+  refreshStore: store,
   refreshOptions: {
     rotate: true,
-    consumeRefreshToken: (jti, context) =>
-      store.consume(jti, context?.familyId),
-    registerRefreshToken: (jti, context) =>
-      store.register(jti, context.familyId),
-    onRefreshReuse: async (context) => {
-      if (context.familyId) await store.revokeFamily(context.familyId);
-    },
   },
 });
 ~~~
 
-The in-memory store is useful for tests and one-process development only. Use
-the same interface with Redis or a database in production.
+`RefreshTokenStore` supplies atomic consumption, replacement registration, and
+family revocation automatically. Its `consume()` method is required;
+`register()` and `revokeFamily()` are optional. The in-memory store is useful
+for tests and one-process development only; use Redis or a database in
+production.
 
 ## Request lifecycle
 
 1. The handler verifies the refresh JWT signature, expiration, and required
    identity claims.
-2. consumeRefreshToken atomically marks the incoming jti as used.
+2. refreshStore.consume atomically marks the incoming jti as used.
 3. If the mark already exists, the request is rejected as a replay.
 4. A successful request receives a new access/refresh pair.
-5. registerRefreshToken tracks the replacement jti under the token family.
-6. onRefreshReuse can revoke every known token in a compromised family.
+5. refreshStore.register tracks the replacement jti under the token family.
+6. refreshStore.revokeFamily can revoke every known token in a compromised family.
 
 The stable family ID is available as context.familyId when rotation is
 enabled. The user ID is available as context.userId.
 
 ## Redis requirements
 
-For multiple application instances, the consume operation must be atomic
-across all instances. The included cookie/Redis example uses Redis SET NX:
+For multiple application instances, `refreshStore.consume()` must be atomic
+across all instances. The included cookie/Redis example implements the public
+store contract with Redis SET NX:
 
 ~~~ts
 const result = await redis.set(

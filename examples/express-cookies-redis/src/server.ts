@@ -115,14 +115,15 @@ const auth = createAuth({
   },
 
   // ── Refresh Token Rotation with Redis ──────────────────────────────────────
+  refreshStore: store,
   refreshOptions: {
     rotate: true,
 
     // Redis SET NX makes each refresh token single-use across instances.
-    consumeRefreshToken: (oldJti, ctx) => store.consume(oldJti, ctx?.familyId),
+    // The refreshStore supplies atomic consume and registration automatically.
 
     // Called after issuing new tokens — track the new jti under its family.
-    registerRefreshToken: (newJti, ctx) => store.register(newJti, ctx.familyId),
+    // Family revocation can still be customized with onRefreshReuse below.
 
     // Called when a revoked token is replayed — kill the entire family.
     onRefreshReuse: async (ctx) => {

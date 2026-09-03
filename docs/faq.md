@@ -89,6 +89,13 @@ Other common causes:
 - The token was truncated or copied with surrounding quotes.
 - A revocation callback reports the token as revoked.
 
+## Why are tokens rejected after adding JWT policy?
+
+When `jwt.issuer` or `jwt.audience` is configured, incoming access and refresh
+tokens must contain matching `iss` and `aud` claims. Issue new tokens with the
+same configuration and check that every service uses the same values. Use a
+small `jwt.clockTolerance` only when server clocks are known to differ.
+
 ## Why does TypeScript say `req.user` does not exist?
 
 Import the package in the application and ensure the project includes the

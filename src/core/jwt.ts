@@ -51,27 +51,27 @@ export interface JwtEngine {
 export function createJwtEngine(config: ResolvedConfig): JwtEngine {
   return {
     generateAccessToken(payload: JwtPayload): Promise<string> {
-      return signToken(payload, config.accessSecret, config.accessExpiresIn);
+      return signToken(payload, config.accessSecret, config.accessExpiresIn, config.jwt);
     },
 
     generateRefreshToken(payload: JwtPayload): Promise<string> {
-      return signToken(payload, config.refreshSecret, config.refreshExpiresIn);
+      return signToken(payload, config.refreshSecret, config.refreshExpiresIn, config.jwt);
     },
 
     async generateTokenPair(payload: JwtPayload): Promise<TokenPair> {
       const [accessToken, refreshToken] = await Promise.all([
-        signToken(payload, config.accessSecret, config.accessExpiresIn),
-        signToken(payload, config.refreshSecret, config.refreshExpiresIn),
+        signToken(payload, config.accessSecret, config.accessExpiresIn, config.jwt),
+        signToken(payload, config.refreshSecret, config.refreshExpiresIn, config.jwt),
       ]);
       return { accessToken, refreshToken };
     },
 
     verifyAccessToken(token: string): Promise<AuthUser> {
-      return verifyToken(token, config.accessSecret);
+      return verifyToken(token, config.accessSecret, config.jwt);
     },
 
     verifyRefreshToken(token: string): Promise<AuthUser> {
-      return verifyToken(token, config.refreshSecret);
+      return verifyToken(token, config.refreshSecret, config.jwt);
     },
 
     decodeToken(token: string): AuthUser {

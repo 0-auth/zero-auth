@@ -25,6 +25,23 @@ const auth = createAuth({
 });
 ~~~
 
+Optional JWT policy:
+
+~~~ts
+const auth = createAuth({
+  accessSecret: process.env.JWT_ACCESS_SECRET!,
+  refreshSecret: process.env.JWT_REFRESH_SECRET!,
+  jwt: {
+    issuer: "https://api.example.com",
+    audience: "web-app",
+    clockTolerance: 5,
+  },
+});
+~~~
+
+The configured issuer and audience are written to new tokens and enforced on
+access and refresh verification. Clock tolerance is measured in seconds.
+
 Protect an Express route:
 
 ~~~ts
@@ -82,6 +99,10 @@ When rotate is true, consumeRefreshToken must atomically mark the incoming jti
 and return true only for the first request. Redis SET NX or a database
 constraint can provide this guarantee. registerRefreshToken tracks replacement
 tokens, and onRefreshReuse can revoke the token family.
+
+Alternatively, pass a refreshStore with consume(jti, context), optional
+register(jti, context), and optional revokeFamily(familyId). The package wires
+these methods into the rotation lifecycle automatically; consume must be atomic.
 
 The legacy isRevoked and revokeRefreshToken hooks remain supported with a
 warning, but their separate check/write sequence is not concurrency-safe.

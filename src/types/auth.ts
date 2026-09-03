@@ -10,6 +10,8 @@ export interface AuthConfig {
   accessSecret: string;
   /** Secret used to sign refresh tokens (HS256). Min 32 chars recommended. */
   refreshSecret: string;
+  /** Optional JWT claim validation policy shared by access and refresh tokens. */
+  jwt?: JwtValidationConfig;
   /** Expiry for access tokens. Accepts zeit/ms strings like "15m", "1h". @default "15m" */
   accessExpiresIn?: string;
   /** Expiry for refresh tokens. Accepts zeit/ms strings like "7d", "30d". @default "7d" */
@@ -18,6 +20,8 @@ export interface AuthConfig {
   cookies?: CookieConfig;
   /** Optional CSRF protection for cookie-authenticated state-changing requests. */
   csrf?: CsrfConfig;
+  /** Atomic refresh-token store used automatically when rotation is enabled. */
+  refreshStore?: RefreshTokenStore;
   /** Optional refresh behavior configuration */
   refreshOptions?: {
     /**
@@ -57,6 +61,16 @@ export interface AuthConfig {
   };
 }
 
+/** Optional issuer, audience, and clock-skew policy for JWTs. */
+export interface JwtValidationConfig {
+  /** Expected `iss` claim. Added to new tokens and checked during verification. */
+  issuer?: string;
+  /** Expected `aud` claim. Added to new tokens and checked during verification. */
+  audience?: string | string[];
+  /** Allowed clock skew in seconds when validating time-based claims. */
+  clockTolerance?: number;
+}
+
 /**
  * Context passed to refresh-token lifecycle hooks.
  */
@@ -71,6 +85,16 @@ export interface RefreshTokenContext {
  */
 export interface RefreshReuseContext extends RefreshTokenContext {
   jti: string;
+}
+
+/**
+ * Application-owned store for concurrency-safe refresh-token rotation.
+ * `consume()` must atomically return true only for the first use of a jti.
+ */
+export interface RefreshTokenStore {
+  consume(jti: string, context?: RefreshTokenContext): Promise<boolean> | boolean;
+  register?(jti: string, context: RefreshTokenContext): Promise<void> | void;
+  revokeFamily?(familyId: string): Promise<void> | void;
 }
 
 /**
@@ -103,6 +127,7 @@ export interface CsrfConfig {
 export interface ResolvedConfig {
   accessSecret: string;
   refreshSecret: string;
+  jwt: JwtValidationConfig;
   accessExpiresIn: string;
   refreshExpiresIn: string;
   cookies: Required<CookieConfig> & { options: CookieOptions };

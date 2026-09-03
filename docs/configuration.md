@@ -8,6 +8,12 @@ const store = createInMemoryRevocationStore(); // Replace with Redis in producti
 const auth = createAuth({
   accessSecret: process.env.JWT_ACCESS_SECRET!,
   refreshSecret: process.env.JWT_REFRESH_SECRET!,
+  refreshStore: store,
+  jwt: {
+    issuer: "https://api.example.com",
+    audience: "web-app",
+    clockTolerance: 5,
+  },
   accessExpiresIn: "15m",
   refreshExpiresIn: "7d",
   cookies: {
@@ -27,19 +33,14 @@ const auth = createAuth({
   },
   refreshOptions: {
     rotate: true,
-    consumeRefreshToken: async (oldJti, context) => {
-      // Use an atomic SET NX or database constraint in production.
-      return store.consume(oldJti, context?.familyId);
-    },
-    registerRefreshToken: async (newJti, context) => {
-      await store.register(newJti, context.familyId);
-    },
-    onRefreshReuse: async (context) => {
-      if (context.familyId) await store.revokeFamily(context.familyId);
-    },
   },
 });
 ```
+
+`jwt.issuer` and `jwt.audience` are added to newly signed tokens and required
+when verifying access or refresh tokens. `clockTolerance` allows a small amount
+of clock skew in seconds; keep it low. Tokens with an `nbf` claim are checked by
+the underlying JWT verifier.
 
 ## Required secrets
 
@@ -75,13 +76,14 @@ into the configured header. See [CSRF protection](/guides/cookies#csrf-protectio
 | Option | Default | Purpose |
 | --- | --- | --- |
 | `rotate` | `false` | Issue a new refresh token on every refresh. |
+| `refreshStore` | — | Atomic store wired to rotation automatically. |
 | `consumeRefreshToken` | — | Atomically mark the old `jti` as used. Required for safe rotation. |
 | `registerRefreshToken` | — | Track the replacement `jti` for family revocation. |
 | `onRefreshReuse` | — | Revoke the token family after a replay is detected. |
 | `isRevoked` / `revokeRefreshToken` | — | Legacy compatibility hooks; warn and are not concurrency-safe. |
 
 Use a shared store for multiple instances. The [refresh rotation guide](/guides/refresh-rotation)
-shows the expected lifecycle.
+shows the expected lifecycle and the public `RefreshTokenStore` contract.
 
 ## Errors
 

@@ -12,7 +12,8 @@ HTTP-only cookies, and RBAC with middleware your team can understand.
 > rest of the README. Legacy `isRevoked` + `revokeRefreshToken` hooks remain
 > supported for compatibility, but emit a warning and are not concurrency-safe.
 > Use the atomic `consumeRefreshToken` hook for rotated refresh tokens,
-> especially in multi-instance deployments.
+> especially in multi-instance deployments. The new `RefreshTokenStore` API is
+> the recommended integration for shared rotation state.
 
 **Start here:** [5-minute quick start](#quick-start-5-minutes) · [runnable examples](#examples) · [API reference](#api-reference)
 
@@ -62,6 +63,8 @@ HTTP-only cookies, and RBAC with middleware your team can understand.
 
 ## Features
 
+- **JWT Validation Policy**: Optionally enforce token issuer, audience, clock tolerance, and `nbf` validation.
+- **Pluggable Refresh Stores**: Connect atomic refresh-token consumption and family revocation to Redis or another store.
 - ⚡ **Zero-Boilerplate Setup**: Initialize with `createAuth()` and start securing routes immediately.
 - 🔒 **Secure by Default**: Cryptographically signed tokens (HS256 via [jose](https://github.com/panva/jose)), enforced minimum 32-character secret length.
 - 🍪 **Built-in Cookie Support**: Seamless HTTP-only cookie handling without extra cookie middleware dependencies.
@@ -218,6 +221,13 @@ const auth = createAuth({
   accessSecret: process.env.JWT_ACCESS_SECRET!,   // String (min 32 chars)
   refreshSecret: process.env.JWT_REFRESH_SECRET!, // String (min 32 chars, distinct from accessSecret)
 
+  // Optional JWT validation policy
+  jwt: {
+    issuer: "https://api.example.com",
+    audience: "web-app",
+    clockTolerance: 5, // Allowed clock skew in seconds
+  },
+
   // Optional Token Expirations (defaults shown)
   accessExpiresIn: "15m",   // Formats: "15m", "1h", "7d", "30d", or milliseconds
   refreshExpiresIn: "7d",
@@ -252,6 +262,10 @@ const auth = createAuth({
   },
 });
 ```
+
+When configured, `jwt.issuer` and `jwt.audience` are included in new tokens and
+must match during verification. `clockTolerance` allows limited clock skew in
+seconds. JWT `nbf` claims are also validated automatically.
 
 ---
 
@@ -420,8 +434,11 @@ When `refreshOptions.rotate: true` is enabled, a new refresh token is issued on 
 `consumeRefreshToken` should atomically mark the incoming `jti` as consumed and
 return `false` when it was already consumed. Use a Redis `SET NX` or equivalent
 database conditional write when the application runs on multiple instances.
-The legacy `isRevoked` + `revokeRefreshToken` pair remains supported in 1.1.x,
-but logs a warning and is not concurrency-safe.
+You can pass a public `refreshStore` instead; its atomic `consume()` method and
+optional `register()` / `revokeFamily()` methods are wired into rotation
+automatically. Explicit refresh hooks still take precedence.
+The legacy `isRevoked` + `revokeRefreshToken` pair remains supported for
+compatibility, but logs a warning and is not concurrency-safe.
 
 ```ts
 import { createClient } from "redis";

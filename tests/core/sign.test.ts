@@ -62,6 +62,19 @@ describe("signToken", () => {
     expect((payloadJson["jti"] as string).length).toBeGreaterThan(0);
   });
 
+  it("sets configured issuer and audience claims", async () => {
+    const token = await signToken({ id: "user-1" }, SECRET, "15m", {
+      issuer: "https://api.example.com",
+      audience: ["web-app", "mobile-app"],
+    });
+    const payloadJson = JSON.parse(
+      Buffer.from(token.split(".")[1]!, "base64url").toString("utf-8")
+    ) as Record<string, unknown>;
+
+    expect(payloadJson["iss"]).toBe("https://api.example.com");
+    expect(payloadJson["aud"]).toEqual(["web-app", "mobile-app"]);
+  });
+
   it("generates unique jti values for each call", async () => {
     const [t1, t2] = await Promise.all([
       signToken({ id: "u" }, SECRET, "15m"),

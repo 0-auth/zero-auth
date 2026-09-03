@@ -1,3 +1,5 @@
+import type { RefreshTokenContext } from "../types/auth.js";
+
 // Simple in-memory revocation store for demo and testing purposes.
 // Not suitable for production — use Redis or another durable store for real deployments.
 
@@ -21,7 +23,8 @@ export function createInMemoryRevocationStore(ttlSeconds = 60 * 60 * 24) {
 
   return {
     /** Atomically consume a jti; returns false when it was already consumed. */
-    async consume(jti: string, familyId?: string): Promise<boolean> {
+    async consume(jti: string, family?: string | RefreshTokenContext): Promise<boolean> {
+      const familyId = resolveFamilyId(family);
       const exp = map.get(jti);
       if (exp !== undefined) {
         if (exp >= nowMs()) return false;
@@ -41,7 +44,8 @@ export function createInMemoryRevocationStore(ttlSeconds = 60 * 60 * 24) {
     },
 
     /** Track a live jti under a family without revoking it (for family kill on reuse). */
-    async register(jti: string, familyId?: string): Promise<void> {
+    async register(jti: string, family?: string | RefreshTokenContext): Promise<void> {
+      const familyId = resolveFamilyId(family);
       trackFamily(jti, familyId);
     },
 
@@ -74,4 +78,8 @@ export function createInMemoryRevocationStore(ttlSeconds = 60 * 60 * 24) {
       return families.get(familyId)?.size ?? 0;
     },
   };
+}
+
+function resolveFamilyId(family?: string | RefreshTokenContext): string | undefined {
+  return typeof family === "string" ? family : family?.familyId;
 }

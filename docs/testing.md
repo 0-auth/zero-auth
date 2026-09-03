@@ -116,6 +116,8 @@ npm pack --dry-run
 ~~~
 
 - Missing, malformed, expired, and tampered tokens
+- Matching and mismatched JWT issuer/audience claims
+- Future `nbf` claims and configured clock tolerance
 - Access tokens rejected where refresh tokens are expected
 - Users with allowed and disallowed roles
 - Users with all required permissions and users missing one permission

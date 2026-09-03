@@ -66,6 +66,33 @@ describe("Refresh rotation", () => {
     expect(replay.status).toBe(401);
   });
 
+  it("wires a refresh store into the rotation lifecycle", async () => {
+    const store = createInMemoryRevocationStore();
+    const auth = createAuth({
+      accessSecret: "store-access-secret-min-32-chars-xxxxx",
+      refreshSecret: "store-refresh-secret-min-32-chars-xxx",
+      refreshStore: store,
+      refreshOptions: { rotate: true },
+    });
+
+    const tokens = await auth.generateTokenPair({ id: "store-user" });
+    const oldJti = decodeToken(tokens.refreshToken).jti!;
+    const familyId = decodeToken(tokens.refreshToken)["fid"] as string;
+    const context = { userId: "store-user", familyId };
+
+    expect(auth.config.refreshOptions.consumeRefreshToken).toBeTypeOf("function");
+    expect(auth.config.refreshOptions.registerRefreshToken).toBeTypeOf("function");
+    expect(auth.config.refreshOptions.onRefreshReuse).toBeTypeOf("function");
+    expect(await auth.config.refreshOptions.consumeRefreshToken!(oldJti, context)).toBe(true);
+    expect(await auth.config.refreshOptions.consumeRefreshToken!(oldJti, context)).toBe(false);
+
+    const replacementJti = "replacement-jti";
+    await auth.config.refreshOptions.registerRefreshToken!(replacementJti, context);
+    await auth.config.refreshOptions.onRefreshReuse!({ jti: oldJti, ...context });
+
+    expect(await store.isRevoked(replacementJti)).toBe(true);
+  });
+
   it("keeps the legacy split-hook fallback working", async () => {
     const store = createInMemoryRevocationStore();
     const auth = createAuth({

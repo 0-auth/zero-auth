@@ -1,5 +1,5 @@
 import { jwtVerify, errors as joseErrors } from "jose";
-import type { AuthUser } from "../types/auth.js";
+import type { AuthUser, JwtValidationConfig } from "../types/auth.js";
 import { AuthError } from "../errors/authErrors.js";
 
 /**
@@ -7,15 +7,25 @@ import { AuthError } from "../errors/authErrors.js";
  *
  * @param token - The compact JWT string to verify.
  * @param secret - The signing secret.
+ * @param options - Optional issuer, audience, and clock-skew validation policy.
  * @returns The decoded `AuthUser` payload.
  * @throws {AuthError} with the appropriate code on any verification failure.
  */
-export async function verifyToken(token: string, secret: string): Promise<AuthUser> {
+export async function verifyToken(
+  token: string,
+  secret: string,
+  options?: JwtValidationConfig
+): Promise<AuthUser> {
   const secretKey = new TextEncoder().encode(secret);
 
   try {
     const { payload } = await jwtVerify(token, secretKey, {
       algorithms: ["HS256"],
+      ...(options?.issuer !== undefined && { issuer: options.issuer }),
+      ...(options?.audience !== undefined && { audience: options.audience }),
+      ...(options?.clockTolerance !== undefined && {
+        clockTolerance: options.clockTolerance,
+      }),
     });
 
     // Ensure the `id` claim is present (required by JwtPayload).

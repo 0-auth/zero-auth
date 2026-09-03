@@ -83,7 +83,7 @@ The refresh flow is deliberately split into clear steps:
 
 The old `isRevoked` + `revokeRefreshToken` callbacks remain supported by
 The legacy split hooks remain supported for compatibility, but they log a
-warning and are not safe for concurrent requests. Use the atomic callback shown
+warning and are not safe for concurrent requests. Use the `refreshStore` shown
 in `src/server.ts`.
 
 ## Production boundary

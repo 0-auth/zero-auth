@@ -275,6 +275,8 @@ export type {
   AuthUser,
   TokenPair,
   ResolvedConfig,
+  JwtValidationConfig,
+  RefreshTokenStore,
   RefreshTokenContext,
   RefreshReuseContext,
 } from "./types/auth.js";

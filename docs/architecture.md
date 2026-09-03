@@ -55,6 +55,7 @@ Application claims are preserved through refresh:
 | <code>permissions</code> | Optional strings checked by <code>authorizePermissions()</code> |
 | <code>jti</code> | Token identifier used for refresh rotation |
 | <code>fid</code> | Stable refresh-token family identifier when rotation is enabled |
+| <code>iss</code> / <code>aud</code> | Optional issuer and audience claims enforced by JWT policy |
 | <code>iat</code> / <code>exp</code> | Issued-at and expiration timestamps |
 
 Do not put passwords, secrets, or unnecessary sensitive data in claims. JWT

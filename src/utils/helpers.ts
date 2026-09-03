@@ -1,4 +1,13 @@
-import type { AuthConfig, ResolvedConfig, JwtPayload, AuthUser } from "../types/auth.js";
+import type {
+  AuthConfig,
+  ResolvedConfig,
+  JwtPayload,
+  AuthUser,
+  JwtValidationConfig,
+  RefreshTokenStore,
+  RefreshReuseContext,
+  RefreshTokenContext,
+} from "../types/auth.js";
 import type { CookieOptions } from "../types/cookies.js";
 
 // ─── Default Values ───────────────────────────────────────────────────────────
@@ -39,6 +48,8 @@ const REGISTERED_JWT_CLAIMS = new Set([
  */
 export function resolveConfig(config: AuthConfig): ResolvedConfig {
   validateSecrets(config);
+  const jwt = resolveJwtConfig(config.jwt);
+  validateRefreshStore(config.refreshStore);
   validateRefreshOptions(config);
 
   const accessTokenName = config.cookies?.accessTokenName ?? DEFAULT_ACCESS_COOKIE_NAME;
@@ -48,6 +59,7 @@ export function resolveConfig(config: AuthConfig): ResolvedConfig {
   return {
     accessSecret: config.accessSecret,
     refreshSecret: config.refreshSecret,
+    jwt,
     accessExpiresIn: config.accessExpiresIn ?? DEFAULT_ACCESS_EXPIRES_IN,
     refreshExpiresIn: config.refreshExpiresIn ?? DEFAULT_REFRESH_EXPIRES_IN,
     cookies: {
@@ -77,22 +89,76 @@ export function resolveConfig(config: AuthConfig): ResolvedConfig {
       })(),
     },
     csrf,
-    refreshOptions: {
-      rotate: config.refreshOptions?.rotate ?? false,
-      ...(config.refreshOptions?.consumeRefreshToken
-        ? { consumeRefreshToken: config.refreshOptions.consumeRefreshToken }
+    refreshOptions: resolveRefreshOptions(config),
+  };
+}
+
+function resolveRefreshOptions(config: AuthConfig): ResolvedConfig["refreshOptions"] {
+  const options = config.refreshOptions;
+  const store = config.refreshStore;
+
+  return {
+    rotate: options?.rotate ?? false,
+    ...(options?.consumeRefreshToken
+      ? { consumeRefreshToken: options.consumeRefreshToken }
+      : typeof store?.consume === "function"
+        ? {
+            consumeRefreshToken: (jti: string, context?: RefreshTokenContext) =>
+              store.consume(jti, context),
+          }
         : {}),
-      ...(config.refreshOptions?.revokeRefreshToken
-        ? { revokeRefreshToken: config.refreshOptions.revokeRefreshToken }
+    ...(options?.revokeRefreshToken ? { revokeRefreshToken: options.revokeRefreshToken } : {}),
+    ...(options?.registerRefreshToken
+      ? { registerRefreshToken: options.registerRefreshToken }
+      : typeof store?.register === "function"
+        ? {
+            registerRefreshToken: (jti: string, context: RefreshTokenContext) =>
+              store.register!(jti, context),
+          }
         : {}),
-      ...(config.refreshOptions?.registerRefreshToken
-        ? { registerRefreshToken: config.refreshOptions.registerRefreshToken }
+    ...(options?.isRevoked ? { isRevoked: options.isRevoked } : {}),
+    ...(options?.onRefreshReuse
+      ? { onRefreshReuse: options.onRefreshReuse }
+      : typeof store?.revokeFamily === "function"
+        ? {
+            onRefreshReuse: async (context: RefreshReuseContext) => {
+              if (context.familyId) await store.revokeFamily!(context.familyId);
+            },
+          }
         : {}),
-      ...(config.refreshOptions?.isRevoked ? { isRevoked: config.refreshOptions.isRevoked } : {}),
-      ...(config.refreshOptions?.onRefreshReuse
-        ? { onRefreshReuse: config.refreshOptions.onRefreshReuse }
-        : {}),
-    },
+  };
+}
+
+function resolveJwtConfig(config?: JwtValidationConfig): JwtValidationConfig {
+  if (!config) return {};
+
+  if (config.issuer !== undefined && (typeof config.issuer !== "string" || !config.issuer.trim())) {
+    throw new Error("[zero-auth] `jwt.issuer` must be a non-empty string.");
+  }
+
+  if (config.audience !== undefined) {
+    const audiences = Array.isArray(config.audience) ? config.audience : [config.audience];
+    if (
+      audiences.length === 0 ||
+      audiences.some((audience) => typeof audience !== "string" || !audience.trim())
+    ) {
+      throw new Error("[zero-auth] `jwt.audience` must contain non-empty strings.");
+    }
+  }
+
+  if (
+    config.clockTolerance !== undefined &&
+    (!Number.isFinite(config.clockTolerance) || config.clockTolerance < 0)
+  ) {
+    throw new Error("[zero-auth] `jwt.clockTolerance` must be a non-negative number.");
+  }
+
+  return {
+    ...(config.issuer !== undefined && { issuer: config.issuer }),
+    ...(config.audience !== undefined && {
+      audience: Array.isArray(config.audience) ? [...config.audience] : config.audience,
+    }),
+    ...(config.clockTolerance !== undefined && { clockTolerance: config.clockTolerance }),
   };
 }
 
@@ -230,7 +296,12 @@ function validateRefreshOptions(config: AuthConfig): void {
   if (!config.refreshOptions?.rotate) return;
 
   const isProd = process.env["NODE_ENV"] === "production";
-  if (typeof config.refreshOptions.consumeRefreshToken === "function") return;
+  if (
+    typeof config.refreshOptions.consumeRefreshToken === "function" ||
+    typeof config.refreshStore?.consume === "function"
+  ) {
+    return;
+  }
 
   const missing: string[] = [];
   if (typeof config.refreshOptions.isRevoked !== "function") missing.push("isRevoked");
@@ -251,4 +322,18 @@ function validateRefreshOptions(config: AuthConfig): void {
     "WARNING: [zero-auth] isRevoked + revokeRefreshToken are deprecated and " +
       "not concurrency-safe; use consumeRefreshToken."
   );
+}
+
+function validateRefreshStore(store?: RefreshTokenStore): void {
+  if (!store) return;
+
+  if (typeof store !== "object" || typeof store.consume !== "function") {
+    throw new Error("[zero-auth] `refreshStore.consume` must be a function.");
+  }
+  if (store.register !== undefined && typeof store.register !== "function") {
+    throw new Error("[zero-auth] `refreshStore.register` must be a function.");
+  }
+  if (store.revokeFamily !== undefined && typeof store.revokeFamily !== "function") {
+    throw new Error("[zero-auth] `refreshStore.revokeFamily` must be a function.");
+  }
 }

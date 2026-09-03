@@ -2,9 +2,18 @@
 
 ## Unreleased
 
+### Added
+
+- Add optional JWT issuer, audience, clock-tolerance, and `nbf` validation.
+- Add the public `RefreshTokenStore` contract for automatic rotation wiring.
+
+### Documentation
+
 - Expand documentation for authentication flows, CSRF, permissions,
   refresh-token rotation, deployment, testing, clients, and releases.
 - Add CI documentation-build validation.
+- Surface the new JWT policy, refresh-store integration, and legacy fallback
+  guidance in the README and documentation site.
 
 ## 1.2.0 - 2026-08-29
 

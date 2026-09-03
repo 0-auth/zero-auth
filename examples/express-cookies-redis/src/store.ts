@@ -10,6 +10,7 @@
  */
 
 import { Redis } from "ioredis";
+import type { RefreshTokenContext } from "@0-auth/zero-auth";
 
 export function createRedisRevocationStore(redis: Redis, ttlSeconds = 60 * 60 * 24 * 8) {
   // TTL slightly longer than refresh token lifetime to cover clock skew.
@@ -18,7 +19,8 @@ export function createRedisRevocationStore(redis: Redis, ttlSeconds = 60 * 60 * 
     /**
      * Atomically consume a jti. Redis SET NX makes this safe across instances.
      */
-    async consume(jti: string, familyId?: string): Promise<boolean> {
+    async consume(jti: string, context?: RefreshTokenContext): Promise<boolean> {
+      const familyId = context?.familyId;
       const result = await redis.set(`revoked:${jti}`, "1", "EX", ttlSeconds, "NX");
       if (result !== "OK") return false;
 
@@ -52,7 +54,8 @@ export function createRedisRevocationStore(redis: Redis, ttlSeconds = 60 * 60 * 
      * Called after a new refresh token is issued so we know which jtis
      * belong to the family (needed for family-wide revocation on reuse).
      */
-    async register(jti: string, familyId?: string): Promise<void> {
+    async register(jti: string, context: RefreshTokenContext): Promise<void> {
+      const familyId = context.familyId;
       if (!familyId) return;
 
       const pipeline = redis.pipeline();

@@ -17,6 +17,54 @@ describe("verifyToken", () => {
     expect(decoded.role).toBe("user");
   });
 
+  it("enforces configured issuer and audience", async () => {
+    const policy = {
+      issuer: "https://api.example.com",
+      audience: "web-app",
+    };
+    const token = await signToken({ id: "user-1" }, SECRET, "15m", policy);
+
+    await expect(verifyToken(token, SECRET, policy)).resolves.toMatchObject({ id: "user-1" });
+    await expect(
+      verifyToken(token, SECRET, { ...policy, issuer: "https://other.example.com" })
+    ).rejects.toMatchObject({ code: "AUTH_TOKEN_INVALID" });
+    await expect(
+      verifyToken(token, SECRET, { ...policy, audience: "mobile-app" })
+    ).rejects.toMatchObject({ code: "AUTH_TOKEN_INVALID" });
+  });
+
+  it("allows configured clock tolerance for time-based claims", async () => {
+    const { SignJWT } = await import("jose");
+    const secretKey = new TextEncoder().encode(SECRET);
+    const token = await new SignJWT({ id: "user-1" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt(Math.floor(Date.now() / 1000) - 2)
+      .setExpirationTime(Math.floor(Date.now() / 1000) - 1)
+      .sign(secretKey);
+
+    await expect(verifyToken(token, SECRET, { clockTolerance: 5 })).resolves.toMatchObject({
+      id: "user-1",
+    });
+    await expect(verifyToken(token, SECRET, { clockTolerance: 0 })).rejects.toMatchObject({
+      code: "AUTH_TOKEN_EXPIRED",
+    });
+  });
+
+  it("rejects a token whose not-before time is in the future", async () => {
+    const { SignJWT } = await import("jose");
+    const secretKey = new TextEncoder().encode(SECRET);
+    const now = Math.floor(Date.now() / 1000);
+    const token = await new SignJWT({ id: "user-1" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setNotBefore(now + 60)
+      .setExpirationTime(now + 900)
+      .sign(secretKey);
+
+    await expect(verifyToken(token, SECRET)).rejects.toMatchObject({
+      code: "AUTH_TOKEN_INVALID",
+    });
+  });
+
   it("throws AUTH_TOKEN_INVALID for a tampered token", async () => {
     const token = await signToken({ id: "user-1" }, SECRET, "15m");
     // Tamper with the payload section.

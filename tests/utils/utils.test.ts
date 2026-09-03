@@ -267,4 +267,49 @@ describe("resolveConfig & validation", () => {
       process.env["NODE_ENV"] = originalEnv;
     }
   });
+
+  it("validates and resolves JWT claim policy", () => {
+    const auth = createAuth({
+      accessSecret: "valid-32-chars-long-access-secret!",
+      refreshSecret: "valid-32-chars-long-refresh-secret!",
+      jwt: {
+        issuer: "https://api.example.com",
+        audience: ["web-app", "mobile-app"],
+        clockTolerance: 5,
+      },
+    });
+
+    expect(auth.config.jwt).toEqual({
+      issuer: "https://api.example.com",
+      audience: ["web-app", "mobile-app"],
+      clockTolerance: 5,
+    });
+  });
+
+  it("rejects invalid JWT claim policy values", () => {
+    const base = {
+      accessSecret: "valid-32-chars-long-access-secret!",
+      refreshSecret: "valid-32-chars-long-refresh-secret!",
+    };
+
+    expect(() => createAuth({ ...base, jwt: { issuer: " " } })).toThrowError(
+      "[zero-auth] `jwt.issuer` must be a non-empty string."
+    );
+    expect(() => createAuth({ ...base, jwt: { audience: [] } })).toThrowError(
+      "[zero-auth] `jwt.audience` must contain non-empty strings."
+    );
+    expect(() => createAuth({ ...base, jwt: { clockTolerance: -1 } })).toThrowError(
+      "[zero-auth] `jwt.clockTolerance` must be a non-negative number."
+    );
+  });
+
+  it("requires refreshStore.consume when a refresh store is supplied", () => {
+    expect(() =>
+      createAuth({
+        accessSecret: "valid-32-chars-long-access-secret!",
+        refreshSecret: "valid-32-chars-long-refresh-secret!",
+        refreshStore: {} as never,
+      })
+    ).toThrowError("[zero-auth] `refreshStore.consume` must be a function.");
+  });
 });

@@ -43,6 +43,9 @@ package does not store users or validate passwords.
 - Store rotation state in Redis or a database when running multiple instances.
 - Do not log or expose complete access or refresh tokens.
 - Reject tokens signed with the wrong secret or intended token type.
+- Set `jwt.issuer` and `jwt.audience` when tokens must be scoped to this API;
+  both claims are checked on access and refresh verification.
+- Keep `jwt.clockTolerance` small and use it only for known clock skew.
 - Put stable identity, role, and permission claims in the token; never put
   passwords, secrets, or unnecessary personal data in it.
 - Treat a permission claim as an input to route authorization, not as a
