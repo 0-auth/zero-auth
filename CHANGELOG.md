@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.3.0 - 2026-09-03
+
 ### Added
 
 - Add optional JWT issuer, audience, clock-tolerance, and `nbf` validation.
