@@ -28,8 +28,10 @@ async function runTests() {
     });
     const regData = (await regRes.json()) as any;
     console.log("Register status:", regRes.status);
-    console.log("Register data:", regData);
-    if (regRes.status !== 201 || !regData.accessToken) throw new Error("Register failed");
+    console.log("Register token pair received:", !!regData.accessToken, !!regData.refreshToken);
+    if (regRes.status !== 201 || !regData.accessToken || !regData.refreshToken) {
+      throw new Error("Register failed");
+    }
 
     console.log("\n--- 2. Testing Login (Admin) ---");
     const loginRes = await fetch(`${baseUrl}/auth/login`, {
@@ -42,7 +44,7 @@ async function runTests() {
     });
     const loginData = (await loginRes.json()) as any;
     console.log("Login status:", loginRes.status);
-    console.log("Login data:", loginData);
+    console.log("Login token pair received:", !!loginData.accessToken, !!loginData.refreshToken);
     const adminToken = loginData.accessToken;
     const adminRefresh = loginData.refreshToken;
 

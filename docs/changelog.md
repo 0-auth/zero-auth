@@ -6,13 +6,14 @@ Package release details live in
 The repository [CHANGELOG.md](https://github.com/0-auth/zero-auth/blob/master/CHANGELOG.md)
 tracks repository-level changes.
 
-## Unreleased
+## 1.4.1 — 2026-09-05
 
 ### Security
 
 - Prevent Redis refresh-token family registrations from winning a race with
   family revocation.
 - Add concurrent Redis rotation coverage to the deployable example.
+- Stop the REST example test from printing complete JWT values.
 
 ## 1.4.0 — 2026-09-05
 
