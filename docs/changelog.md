@@ -8,6 +8,11 @@ tracks repository-level changes.
 
 ## Unreleased
 
+### Added
+
+- Add the optional-dependency-free `createRedisRevocationStore()` helper for
+  ioredis-compatible clients and atomic refresh-token rotation.
+
 ## 1.3.0 — 2026-09-03
 
 ### Added

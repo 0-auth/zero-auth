@@ -442,49 +442,39 @@ automatically. Explicit refresh hooks still take precedence.
 The legacy `isRevoked` + `revokeRefreshToken` pair remains supported for
 compatibility, but logs a warning and is not concurrency-safe.
 
+Install `ioredis` in your application, then use the built-in adapter. The
+package does not add a Redis client dependency to your application:
+
+```bash
+npm install @0-auth/zero-auth ioredis
+```
+
 ```ts
-import { createClient } from "redis";
-import { createAuth } from "@0-auth/zero-auth";
+import Redis from "ioredis";
+import {
+  createAuth,
+  createRedisRevocationStore,
+} from "@0-auth/zero-auth";
 
-const redis = createClient({ url: process.env.REDIS_URL });
-await redis.connect();
-
-const REFRESH_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
+const redis = new Redis(process.env.REDIS_URL);
+const refreshStore = createRedisRevocationStore(redis);
 
 const auth = createAuth({
   accessSecret: process.env.JWT_ACCESS_SECRET!,
   refreshSecret: process.env.JWT_REFRESH_SECRET!,
+  refreshStore,
   refreshOptions: {
     rotate: true,
-    // SET NX atomically consumes the old token across all instances.
-    consumeRefreshToken: async (oldJti, ctx) => {
-      const result = await redis.set(`revoked:${oldJti}`, "1", {
-        EX: REFRESH_TTL_SECONDS,
-        NX: true,
-      });
-      if (result !== "OK") return false;
-      if (ctx?.familyId) {
-        await redis.sAdd(`family:${ctx.familyId}`, oldJti);
-      }
-      return true;
-    },
-    // Register the new token under the family
-    registerRefreshToken: async (newJti, ctx) => {
-      if (ctx?.familyId) {
-        await redis.sAdd(`family:${ctx.familyId}`, newJti);
-      }
-    },
-    // Token reuse detected! Invalidate the whole family
-    onRefreshReuse: async (ctx) => {
-      if (!ctx.familyId) return;
-      const allTokens = await redis.sMembers(`family:${ctx.familyId}`);
-      for (const tokenJti of allTokens) {
-        await redis.set(`revoked:${tokenJti}`, "1", { EX: REFRESH_TTL_SECONDS });
-      }
+    onRefreshReuse: async ({ familyId }) => {
+      if (familyId) await refreshStore.revokeFamily(familyId);
     },
   },
 });
 ```
+
+The adapter uses Redis `SET NX` for atomic single-use consumption and tracks
+refresh-token families with TTLs. It accepts the ioredis-compatible client
+surface without importing or bundling a Redis client.
 
 ---
 
@@ -631,6 +621,8 @@ import {
 
   // In-Memory Revocation (Testing / Dev)
   createInMemoryRevocationStore,
+  // Redis-backed revocation (distributed deployments)
+  createRedisRevocationStore,
 } from "@0-auth/zero-auth";
 ```
 
@@ -645,6 +637,7 @@ import {
 | `clearCookie(res, name, options)` | Clears a cookie matching its path/domain/sameSite settings. |
 | `parseCookieHeader(cookieHeader)` | Zero-dependency cookie string parser. |
 | `createInMemoryRevocationStore()` | In-memory token revocation helper for development and tests. |
+| `createRedisRevocationStore(redis, ttlSeconds?)` | ioredis-compatible store for atomic rotation and family revocation. |
 
 ---
 

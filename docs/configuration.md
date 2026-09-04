@@ -83,7 +83,8 @@ into the configured header. See [CSRF protection](/guides/cookies#csrf-protectio
 | `isRevoked` / `revokeRefreshToken` | — | Legacy compatibility hooks; warn and are not concurrency-safe. |
 
 Use a shared store for multiple instances. The [refresh rotation guide](/guides/refresh-rotation)
-shows the expected lifecycle and the public `RefreshTokenStore` contract.
+shows the expected lifecycle, the public `RefreshTokenStore` contract, and the
+built-in `createRedisRevocationStore()` adapter for ioredis-compatible clients.
 
 ## Errors
 
