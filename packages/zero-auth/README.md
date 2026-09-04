@@ -474,7 +474,10 @@ const auth = createAuth({
 
 The adapter uses Redis `SET NX` for atomic single-use consumption and tracks
 refresh-token families with TTLs. It accepts the ioredis-compatible client
-surface without importing or bundling a Redis client.
+surface without importing or bundling a Redis client. When a family is
+compromised, it writes a marker before scanning known members and atomically
+rejects late replacement registrations, so a concurrent replay cannot leave a
+new usable refresh token behind.
 
 ---
 

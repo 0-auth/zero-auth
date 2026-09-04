@@ -109,11 +109,20 @@ and pass its client instance to `createRedisRevocationStore()`.
 Use a TTL at least as long as the refresh-token lifetime, with enough margin
 for clock skew. Store family membership with a matching TTL.
 
+When `revokeFamily()` runs, the Redis adapter marks the family compromised
+before scanning its members. `register()` checks that marker atomically, so a
+replacement that races with replay handling is rejected instead of returned as
+usable.
+
 ## Replay behavior
 
 The first request with a rotated refresh token returns 200 and a replacement
 pair. A concurrent or later request with the old token returns
 401 AUTH_TOKEN_INVALID and calls onRefreshReuse when configured.
+
+During a true concurrent replay, family revocation can win before the first
+request registers its replacement. In that case both requests fail closed with
+401; no new usable refresh token is returned.
 
 If the application revokes the token family after reuse, the legitimate
 replacement token also becomes invalid and the user must sign in again.
