@@ -3,6 +3,9 @@ import js from "@eslint/js";
 import tsParser from "@typescript-eslint/parser";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
 import prettierConfig from "eslint-config-prettier";
+import { fileURLToPath } from "node:url";
+
+const configDir = fileURLToPath(new URL(".", import.meta.url));
 
 const tsRules = {
   "@typescript-eslint/no-explicit-any": "error",
@@ -32,7 +35,7 @@ export default [
       parser: tsParser,
       parserOptions: {
         project: "./packages/zero-auth/tsconfig.json",
-        tsconfigRootDir: import.meta.dirname,
+        tsconfigRootDir: configDir,
       },
     },
     plugins: { "@typescript-eslint": tsPlugin },
@@ -46,7 +49,7 @@ export default [
       parser: tsParser,
       parserOptions: {
         project: "./packages/zero-auth/tsconfig.test.json",
-        tsconfigRootDir: import.meta.dirname,
+        tsconfigRootDir: configDir,
       },
     },
     plugins: { "@typescript-eslint": tsPlugin },
