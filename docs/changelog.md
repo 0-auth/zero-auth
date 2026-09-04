@@ -8,6 +8,8 @@ tracks repository-level changes.
 
 ## Unreleased
 
+## 1.4.0 — 2026-09-05
+
 ### Added
 
 - Add the optional-dependency-free `createRedisRevocationStore()` helper for
