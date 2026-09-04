@@ -27,9 +27,9 @@ jobs:
         run: npm ci
 
       - name: Run verification & build
-        run: npm run prepublishOnly
+        run: npm run prepublishOnly --workspace @0-auth/zero-auth
 
       - name: Publish package to npm
-        run: npm publish --access public --provenance
+        run: npm publish --workspace @0-auth/zero-auth --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

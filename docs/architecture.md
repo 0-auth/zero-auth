@@ -94,12 +94,12 @@ different processes.
 
 ## Source layout
 
-- <code>src/core</code>: JWT signing, verification, and decoding.
-- <code>src/middleware</code>: protection, optional auth, roles, permissions, and CSRF.
-- <code>src/refresh</code>: refresh handling and revocation-store helpers.
-- <code>src/cookies</code>: cookie setting, clearing, and parsing.
-- <code>src/errors</code>: typed errors and Express error responses.
-- <code>src/types</code>: public configuration, payload, and Express augmentation types.
+- <code>packages/zero-auth/src/core</code>: JWT signing, verification, and decoding.
+- <code>packages/zero-auth/src/middleware</code>: protection, optional auth, roles, permissions, and CSRF.
+- <code>packages/zero-auth/src/refresh</code>: refresh handling and revocation-store helpers.
+- <code>packages/zero-auth/src/cookies</code>: cookie setting, clearing, and parsing.
+- <code>packages/zero-auth/src/errors</code>: typed errors and Express error responses.
+- <code>packages/zero-auth/src/types</code>: public configuration, payload, and Express augmentation types.
 - <code>tests</code>: unit, integration, security, rotation, and concurrency coverage.
 
 ## Failure boundaries

@@ -3,6 +3,9 @@ import js from "@eslint/js";
 import tsParser from "@typescript-eslint/parser";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
 import prettierConfig from "eslint-config-prettier";
+import { fileURLToPath } from "node:url";
+
+const configDir = fileURLToPath(new URL(".", import.meta.url));
 
 const tsRules = {
   "@typescript-eslint/no-explicit-any": "error",
@@ -27,12 +30,12 @@ export default [
 
   // ── Source files ─────────────────────────────────────────────────────────
   {
-    files: ["src/**/*.ts"],
+    files: ["packages/zero-auth/src/**/*.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
-        project: "./tsconfig.json",
-        tsconfigRootDir: import.meta.dirname,
+        project: "./packages/zero-auth/tsconfig.json",
+        tsconfigRootDir: configDir,
       },
     },
     plugins: { "@typescript-eslint": tsPlugin },
@@ -41,12 +44,12 @@ export default [
 
   // ── Test files (separate tsconfig that includes tests/) ──────────────────
   {
-    files: ["tests/**/*.ts"],
+    files: ["packages/zero-auth/tests/**/*.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
-        project: "./tsconfig.test.json",
-        tsconfigRootDir: import.meta.dirname,
+        project: "./packages/zero-auth/tsconfig.test.json",
+        tsconfigRootDir: configDir,
       },
     },
     plugins: { "@typescript-eslint": tsPlugin },

@@ -1,6 +1,7 @@
 {
   "$schema": "https://typedoc.org/schema.json",
-  "entryPoints": ["src/index.ts"],
+  "entryPoints": ["packages/zero-auth/src/index.ts"],
+  "tsconfig": "packages/zero-auth/tsconfig.json",
   "plugin": ["typedoc-plugin-markdown"],
   "outputs": [{ "name": "markdown", "path": "docs/api" }],
   "entryFileName": "index",

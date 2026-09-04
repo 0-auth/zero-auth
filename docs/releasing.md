@@ -7,9 +7,11 @@ version.
 ## Before a release
 
 1. Confirm the working tree is clean except for the intended changes.
-2. Update the package version in package.json and package-lock.json.
-3. Add the release entry to CHANGELOG.md.
-4. Put breaking changes and upgrade steps at the start of README.md.
+2. Update the package version in `packages/zero-auth/package.json` and
+   `package-lock.json`.
+3. Add the release entry to `packages/zero-auth/CHANGELOG.md`.
+4. Put breaking changes and upgrade steps at the start of
+   `packages/zero-auth/README.md`.
 5. Update examples and API-facing documentation.
 6. Run the complete local gate:
 
@@ -20,7 +22,7 @@ npm run typecheck
 npm run test:coverage
 npm run build
 npm run docs:build
-npm pack --dry-run
+npm pack --workspace @0-auth/zero-auth --dry-run
 ~~~
 
 Run both examples when their dependencies are available:
@@ -85,13 +87,14 @@ the public middleware API.
 
 ## Documentation publishing
 
-The tracked documentation source lives in README.md and docs/. Generated
-TypeDoc output lives in docs/api/ and is intentionally ignored. It is rebuilt
-by npm run docs:build and should not be edited by hand.
+The package documentation source lives in `packages/zero-auth/README.md` and
+`packages/zero-auth/CHANGELOG.md`. Repository and site documentation lives in
+`docs/`. Generated TypeDoc output lives in `docs/api/` and is intentionally
+ignored. It is rebuilt by `npm run docs:build` and should not be edited by hand.
 
-The npm tarball includes README.md, CHANGELOG.md, the license, compiled builds,
-and TypeScript declarations. The full VitePress site is maintained from the
-repository docs/ directory.
+The npm tarball includes the package README, changelog, license, compiled
+builds, and TypeScript declarations. The full VitePress site is maintained
+from the repository `docs/` directory.
 
 ## Rollback
 

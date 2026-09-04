@@ -1,0 +1,103 @@
+{
+  "name": "@0-auth/zero-auth",
+  "version": "1.3.0",
+  "description": "Minimal JWT authentication for Node.js and Express APIs with refresh-token rotation, HTTP-only cookies, and RBAC",
+  "author": "Darshan Kinge",
+  "license": "MIT",
+  "keywords": [
+    "jwt",
+    "jwt-auth",
+    "jwt-authentication",
+    "access-token",
+    "authentication",
+    "authorization",
+    "api",
+    "middleware",
+    "express",
+    "express-authentication",
+    "nodejs",
+    "typescript",
+    "refresh-token",
+    "refresh-token-rotation",
+    "token-revocation",
+    "cookie",
+    "http-only-cookie",
+    "rbac"
+  ],
+  "homepage": "https://zero-auth.netlify.app/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0-auth/zero-auth.git"
+  },
+  "bugs": {
+    "url": "https://github.com/0-auth/zero-auth/issues"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src tests",
+    "lint:fix": "eslint src tests --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run lint && npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "jose": "^5.9.6"
+  },
+  "peerDependencies": {
+    "express": "^4.18.0 || ^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/supertest": "^6.0.2",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "express": "^4.21.2",
+    "prettier": "^3.3.3",
+    "supertest": "^7.0.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "sideEffects": [
+    "./dist/index.js",
+    "./dist/index.mjs"
+  ]
+}

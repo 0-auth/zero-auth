@@ -1,8 +1,10 @@
 # Changelog
 
-This page tracks user-visible changes to <code>@0-auth/zero-auth</code>.
+This page tracks user-visible changes to the packages in this repository.
+Package release details live in
+[`packages/zero-auth/CHANGELOG.md`](https://github.com/0-auth/zero-auth/blob/master/packages/zero-auth/CHANGELOG.md).
 The repository [CHANGELOG.md](https://github.com/0-auth/zero-auth/blob/master/CHANGELOG.md)
-remains the source of truth for release preparation.
+tracks repository-level changes.
 
 ## Unreleased
 
@@ -53,4 +55,4 @@ remains the source of truth for release preparation.
 
 For versioning, release checks, GitHub releases, and npm publishing, see
 [Release and maintenance](/releasing). Breaking changes must also be called
-out in the attention section at the start of the root README.
+out in the attention section at the start of the package README.
