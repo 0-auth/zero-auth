@@ -6,10 +6,11 @@ Package-specific changes are tracked in each package changelog:
 
 ## Repository changes
 
-### Unreleased
+### 1.4.1 - 2026-09-05
 
 - Harden Redis refresh-token family revocation against late replacement
   registration and add live concurrent-rotation coverage.
+- Stop the REST example test from printing complete JWT values.
 
 ### 1.3.0 - 2026-09-03
 
