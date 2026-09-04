@@ -103,6 +103,8 @@ tokens, and onRefreshReuse can revoke the token family.
 Alternatively, pass a refreshStore with consume(jti, context), optional
 register(jti, context), and optional revokeFamily(familyId). The package wires
 these methods into the rotation lifecycle automatically; consume must be atomic.
+For ioredis-compatible clients, createRedisRevocationStore(redis, ttlSeconds?)
+provides this store without bundling a Redis client dependency.
 
 The legacy isRevoked and revokeRefreshToken hooks remain supported with a
 warning, but their separate check/write sequence is not concurrency-safe.

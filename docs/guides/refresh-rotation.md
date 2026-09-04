@@ -69,8 +69,28 @@ enabled. The user ID is available as context.userId.
 ## Redis requirements
 
 For multiple application instances, `refreshStore.consume()` must be atomic
-across all instances. The included cookie/Redis example implements the public
-store contract with Redis SET NX:
+across all instances. The package includes an adapter for ioredis-compatible
+clients:
+
+~~~ts
+import Redis from "ioredis";
+import {
+  createAuth,
+  createRedisRevocationStore,
+} from "@0-auth/zero-auth";
+
+const redis = new Redis(process.env.REDIS_URL);
+const refreshStore = createRedisRevocationStore(redis);
+
+const auth = createAuth({
+  accessSecret: process.env.JWT_ACCESS_SECRET!,
+  refreshSecret: process.env.JWT_REFRESH_SECRET!,
+  refreshStore,
+  refreshOptions: { rotate: true },
+});
+~~~
+
+The adapter uses Redis `SET NX` internally:
 
 ~~~ts
 const result = await redis.set(
@@ -82,6 +102,9 @@ const result = await redis.set(
 );
 return result === "OK";
 ~~~
+
+The package does not install a Redis client. Add `ioredis` to the application,
+and pass its client instance to `createRedisRevocationStore()`.
 
 Use a TTL at least as long as the refresh-token lifetime, with enough margin
 for clock skew. Store family membership with a matching TTL.

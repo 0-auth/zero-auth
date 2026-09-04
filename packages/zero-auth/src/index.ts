@@ -297,6 +297,12 @@ export { parseCookieHeader } from "./cookies/parseCookie.js";
 
 // Revocation helpers
 export { createInMemoryRevocationStore } from "./refresh/inMemoryRevocationStore.js";
+export { createRedisRevocationStore } from "./refresh/redisRevocationStore.js";
+export type {
+  RedisClient,
+  RedisPipeline,
+  RedisRevocationStore,
+} from "./refresh/redisRevocationStore.js";
 
 // Core utilities (for advanced usage)
 export { signToken } from "./core/sign.js";
