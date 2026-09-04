@@ -27,11 +27,11 @@ export default [
 
   // ── Source files ─────────────────────────────────────────────────────────
   {
-    files: ["src/**/*.ts"],
+    files: ["packages/zero-auth/src/**/*.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
-        project: "./tsconfig.json",
+        project: "./packages/zero-auth/tsconfig.json",
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -41,11 +41,11 @@ export default [
 
   // ── Test files (separate tsconfig that includes tests/) ──────────────────
   {
-    files: ["tests/**/*.ts"],
+    files: ["packages/zero-auth/tests/**/*.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
-        project: "./tsconfig.test.json",
+        project: "./packages/zero-auth/tsconfig.test.json",
         tsconfigRootDir: import.meta.dirname,
       },
     },

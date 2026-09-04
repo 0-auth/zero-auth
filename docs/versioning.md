@@ -104,4 +104,4 @@ Use this format for future breaking changes:
 
 Document the user-visible effect, the exact code change, and any token, cookie,
 or refresh-state consequences. Breaking changes must also be placed in the
-attention section at the start of the root README.
+attention section at the start of the package README.

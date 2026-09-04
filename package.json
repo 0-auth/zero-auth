@@ -1,112 +1,32 @@
 {
-  "name": "@0-auth/zero-auth",
-  "version": "1.3.0",
-  "description": "Minimal JWT authentication for Node.js and Express APIs with refresh-token rotation, HTTP-only cookies, and RBAC",
-  "author": "Darshan Kinge",
-  "license": "MIT",
-  "keywords": [
-    "jwt",
-    "jwt-auth",
-    "jwt-authentication",
-    "access-token",
-    "authentication",
-    "authorization",
-    "api",
-    "middleware",
-    "express",
-    "express-authentication",
-    "nodejs",
-    "typescript",
-    "refresh-token",
-    "refresh-token-rotation",
-    "token-revocation",
-    "cookie",
-    "http-only-cookie",
-    "rbac"
-  ],
-  "homepage": "https://zero-auth.netlify.app/",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/0-auth/zero-auth.git"
-  },
-  "bugs": {
-    "url": "https://github.com/0-auth/zero-auth/issues"
-  },
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": {
-        "types": "./dist/index.d.mts",
-        "default": "./dist/index.mjs"
-      },
-      "require": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      }
-    }
-  },
-  "files": [
-    "dist",
-    "README.md",
-    "CHANGELOG.md",
-    "LICENSE"
+  "name": "0-auth-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
   ],
   "scripts": {
-    "build": "node node_modules/tsup/dist/cli-default.js",
-    "dev": "node node_modules/tsup/dist/cli-default.js --watch",
-    "test": "node node_modules/vitest/vitest.mjs run",
-    "test:watch": "node node_modules/vitest/vitest.mjs",
-    "test:coverage": "node node_modules/vitest/vitest.mjs run --coverage",
-    "lint": "node node_modules/eslint/bin/eslint.js src tests",
-    "lint:fix": "node node_modules/eslint/bin/eslint.js src tests --fix",
-    "format": "node node_modules/prettier/bin/prettier.cjs --write \"src/**/*.ts\" \"tests/**/*.ts\"",
-    "format:check": "node node_modules/prettier/bin/prettier.cjs --check \"src/**/*.ts\" \"tests/**/*.ts\"",
-    "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
+    "build": "npm run build --workspace @0-auth/zero-auth",
+    "dev": "npm run dev --workspace @0-auth/zero-auth",
+    "test": "npm run test --workspace @0-auth/zero-auth",
+    "test:watch": "npm run test:watch --workspace @0-auth/zero-auth",
+    "test:coverage": "npm run test:coverage --workspace @0-auth/zero-auth",
+    "lint": "npm run lint --workspace @0-auth/zero-auth",
+    "lint:fix": "npm run lint:fix --workspace @0-auth/zero-auth",
+    "format": "npm run format --workspace @0-auth/zero-auth",
+    "format:check": "npm run format:check --workspace @0-auth/zero-auth",
+    "typecheck": "npm run typecheck --workspace @0-auth/zero-auth",
+    "prepublishOnly": "npm run prepublishOnly --workspace @0-auth/zero-auth",
     "docs": "npm run docs:build",
-    "docs:api": "node node_modules/typedoc/bin/typedoc",
+    "docs:api": "typedoc",
     "docs:dev": "vitepress dev docs",
     "docs:preview": "vitepress preview docs",
     "docs:build": "npm run docs:api && vitepress build docs",
-    "docs:build:versioned": "npm run docs:api && vitepress build docs --outDir docs/.vitepress/dist/v1",
-    "prepublishOnly": "npm run lint && npm run typecheck && npm run test && npm run build"
-  },
-  "dependencies": {
-    "jose": "^5.9.6"
-  },
-  "peerDependencies": {
-    "express": "^4.18.0 || ^5.0.0"
-  },
-  "peerDependenciesMeta": {
-    "express": {
-      "optional": true
-    }
+    "docs:build:versioned": "npm run docs:api && vitepress build docs --outDir docs/.vitepress/dist/v1"
   },
   "devDependencies": {
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.0.0",
-    "@types/supertest": "^6.0.2",
-    "@typescript-eslint/eslint-plugin": "^8.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "@vitest/coverage-v8": "^2.0.0",
-    "eslint": "^9.0.0",
-    "eslint-config-prettier": "^9.1.0",
-    "express": "^4.21.2",
-    "prettier": "^3.3.3",
-    "supertest": "^7.0.0",
-    "tsup": "^8.3.0",
     "typedoc": "^0.28.19",
     "typedoc-plugin-markdown": "^4.12.0",
-    "typescript": "^5.6.0",
-    "vitepress": "^1.6.4",
-    "vitest": "^2.0.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "sideEffects": [
-    "./dist/index.js",
-    "./dist/index.mjs"
-  ]
+    "vitepress": "^1.6.4"
+  }
 }

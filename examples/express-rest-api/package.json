@@ -10,7 +10,7 @@
     "test": "npx tsx test-e2e.ts"
   },
   "dependencies": {
-    "@0-auth/zero-auth": "file:../../",
+    "@0-auth/zero-auth": "file:../../packages/zero-auth",
     "express": "^4.21.2"
   },
   "devDependencies": {
