@@ -78,10 +78,11 @@ The refresh flow is deliberately split into clear steps:
    concurrent request can consume a refresh token.
 3. A successful request receives a new access/refresh pair. The new refresh
    `jti` is registered under the token family.
-4. A replay returns `401` and calls `onRefreshReuse`, which revokes every known
+4. The adapter marks the family compromised before scanning members, so a
+   replacement registration racing with replay handling is rejected.
+5. A replay returns `401` and calls `onRefreshReuse`, which revokes every known
    `jti` in that family.
 
-The old `isRevoked` + `revokeRefreshToken` callbacks remain supported by
 The legacy split hooks remain supported for compatibility, but they log a
 warning and are not safe for concurrent requests. Use the `refreshStore` shown
 in `src/server.ts`.
@@ -225,7 +226,8 @@ npm test
 
 The test starts an ephemeral HTTP server, verifies Redis health, exercises
 cookie login, CSRF setup and rejection, protected access, refresh rotation,
-and logout. Redis must be running first.
+concurrent refresh replay protection, family revocation, and logout. Redis must
+be running first.
 
 ## Features Demonstrated
 
@@ -239,6 +241,7 @@ and logout. Redis must be running first.
 | `consumeRefreshToken` hook   | Atomic Redis single-use check before issuing pair |
 | `registerRefreshToken` hook  | Tracks new jti under family in Redis            |
 | `onRefreshReuse` hook        | Revokes entire family on replay detection        |
+| Concurrent refresh test      | Verifies Redis allows at most one winner         |
 | `protect()`                  | `GET /profile`, `DELETE /admin/users/:id`       |
 | `authorize(["admin"])`       | `DELETE /admin/users/:id`                       |
 | `optional()`                 | `GET /posts`                                    |

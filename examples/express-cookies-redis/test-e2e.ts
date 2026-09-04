@@ -39,7 +39,7 @@ async function runTests() {
       : [regRes.headers.get("set-cookie") || ""];
     const regData = (await regRes.json()) as any;
     console.log("Register status:", regRes.status);
-    console.log("Register Set-Cookie headers:", regCookies);
+    console.log("Register cookies received:", regCookies.length);
     if (regRes.status !== 201 || regCookies.length === 0 || regData.user.role !== "user") {
       throw new Error("Register cookies or role restriction failed");
     }
@@ -58,11 +58,11 @@ async function runTests() {
       : [loginRes.headers.get("set-cookie") || ""];
     const loginData = (await loginRes.json()) as any;
     console.log("Login status:", loginRes.status);
-    console.log("Set-Cookie headers received:", setCookieHeaders);
+    console.log("Login cookies received:", setCookieHeaders.length);
 
     // Extract access_token and refresh_token from cookies
     const cookieHeader = setCookieHeaders.map((c) => c.split(";")[0]).join("; ");
-    console.log("Cookie header for subsequent requests:", cookieHeader);
+    console.log("Cookie jar established");
 
     console.log("\n--- 4. Testing CSRF Token ---");
     const csrfRes = await fetch(`${baseUrl}/auth/csrf-token`, {
@@ -96,10 +96,67 @@ async function runTests() {
     if (profileRes.status !== 200 || profileData.user.id !== "1")
       throw new Error("Cookie profile failed");
 
-    console.log("\n--- 6. Testing Refresh Token Rotation via Cookie ---");
+    console.log("\n--- 6. Testing Concurrent Refresh Replay Protection ---");
+    const parallelLoginRes = await fetch(`${baseUrl}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "admin@example.com",
+        password: "admin123",
+      }),
+    });
+    const parallelSetCookies = parallelLoginRes.headers.getSetCookie
+      ? parallelLoginRes.headers.getSetCookie()
+      : [parallelLoginRes.headers.get("set-cookie") || ""];
+    const parallelCookieHeader = parallelSetCookies.map((c) => c.split(";")[0]).join("; ");
+    const csrfToken = csrfData.csrfToken;
+    if (parallelLoginRes.status !== 200 || !parallelCookieHeader || !csrfToken) {
+      throw new Error("Could not prepare concurrent refresh test");
+    }
+
+    const refreshRequest = () =>
+      fetch(`${baseUrl}/auth/refresh`, {
+        method: "POST",
+        headers: {
+          Cookie: `${parallelCookieHeader}; ${csrfCookieHeader}`,
+          "x-csrf-token": csrfToken,
+        },
+      });
+    const concurrentResponses = await Promise.all([refreshRequest(), refreshRequest()]);
+    const concurrentResults = await Promise.all(
+      concurrentResponses.map(async (response) => ({
+        status: response.status,
+        data: (await response.json()) as { refreshToken?: string },
+      }))
+    );
+    const successCount = concurrentResults.filter(({ status }) => status === 200).length;
+    const rejectedCount = concurrentResults.filter(({ status }) => status === 401).length;
+    console.log("Concurrent refresh statuses:", concurrentResults.map(({ status }) => status));
+    if (successCount > 1 || rejectedCount < 1) {
+      throw new Error("Concurrent refresh did not enforce single-use rotation");
+    }
+
+    const winner = concurrentResults.find(({ status }) => status === 200);
+    if (winner?.data.refreshToken) {
+      const familyReplayRes = await fetch(`${baseUrl}/auth/refresh`, {
+        method: "POST",
+        headers: {
+          Cookie: `refresh_token=${winner.data.refreshToken}; ${csrfCookieHeader}`,
+          "x-csrf-token": csrfToken,
+        },
+      });
+      if (familyReplayRes.status !== 401) {
+        throw new Error("Refresh-token family was not revoked after concurrent replay");
+      }
+      console.log("Family revocation after replay: PASS");
+    } else {
+      console.log("Family revocation won the concurrent race: PASS");
+    }
+
+    console.log("\n--- 7. Testing Refresh Token Rotation via Cookie ---");
     const refreshRes = await fetch(`${baseUrl}/auth/refresh`, {
       method: "POST",
-      headers: { Cookie: cookieHeaderWithCsrf, "x-csrf-token": csrfData.csrfToken },
+      headers: { Cookie: cookieHeaderWithCsrf, "x-csrf-token": csrfToken },
     });
     const refreshData = (await refreshRes.json()) as any;
     const rotatedCookies = refreshRes.headers.getSetCookie
@@ -107,30 +164,30 @@ async function runTests() {
       : [refreshRes.headers.get("set-cookie") || ""];
     console.log("Refresh status:", refreshRes.status);
     console.log("Rotated tokens in body:", !!refreshData.accessToken, !!refreshData.refreshToken);
-    console.log("Rotated Set-Cookie headers:", rotatedCookies);
+    console.log("Rotated cookies received:", rotatedCookies.length);
 
     const rotatedCookieHeader = rotatedCookies.map((c) => c.split(";")[0]).join("; ");
 
-    console.log("\n--- 7. Testing Profile with New Rotated Cookie ---");
+    console.log("\n--- 8. Testing Profile with New Rotated Cookie ---");
     const profileAfterRotate = await fetch(`${baseUrl}/profile`, {
       headers: { Cookie: `${rotatedCookieHeader}; ${csrfCookieHeader}` },
     });
     console.log("Profile status with rotated cookie:", profileAfterRotate.status);
     if (profileAfterRotate.status !== 200) throw new Error("Rotated cookie failed");
 
-    console.log("\n--- 8. Testing Logout (Clears Cookies) ---");
+    console.log("\n--- 9. Testing Logout (Clears Cookies) ---");
     const logoutRes = await fetch(`${baseUrl}/auth/logout`, {
       method: "POST",
       headers: {
         Cookie: `${rotatedCookieHeader}; ${csrfCookieHeader}`,
-        "x-csrf-token": csrfData.csrfToken,
+        "x-csrf-token": csrfToken,
       },
     });
     const logoutCookies = logoutRes.headers.getSetCookie
       ? logoutRes.headers.getSetCookie()
       : [logoutRes.headers.get("set-cookie") || ""];
     console.log("Logout status:", logoutRes.status);
-    console.log("Logout clear cookies:", logoutCookies);
+    console.log("Logout cookies cleared:", logoutCookies.length);
 
     console.log("\n✅ ALL COOKIES-REDIS EXAMPLE TESTS PASSED SUCCESSFULLY!\n");
   } finally {

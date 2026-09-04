@@ -6,6 +6,11 @@ Package-specific changes are tracked in each package changelog:
 
 ## Repository changes
 
+### Unreleased
+
+- Harden Redis refresh-token family revocation against late replacement
+  registration and add live concurrent-rotation coverage.
+
 ### 1.3.0 - 2026-09-03
 
 - Migrate the repository to an npm-workspaces layout without changing the

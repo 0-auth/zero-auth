@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Security
+
+- Prevent Redis refresh-token family registrations from winning a race with
+  family revocation.
+- Add concurrent Redis rotation coverage to the deployable example.
+
 ## 1.4.0 - 2026-09-05
 
 ### Added

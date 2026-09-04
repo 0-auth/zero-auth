@@ -102,7 +102,8 @@ Access-token verification is stateless. Refresh-token rotation is not:
 `consumeRefreshToken` needs an atomic operation in a shared store such as Redis
 or a database when requests can reach different instances. The legacy
 `isRevoked` + `revokeRefreshToken` pair remains supported with a warning but is
-not concurrency-safe.
+not concurrency-safe. The built-in Redis adapter also marks a compromised
+family before registering replacements, closing the replay/revocation race.
 
 The in-memory revocation store is suitable for local development and single-
 process tests, not for horizontally scaled production deployments.
