@@ -1,0 +1,222 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { createServer } from "node:net";
+import { fileURLToPath } from "node:url";
+import { MongoClient } from "mongodb";
+
+// An owned database and child process make this safe beside other local applications.
+const uri = process.env.MONGODB_URI ?? "mongodb://127.0.0.1:27017";
+const database = `zero_auth_example_test_${randomUUID().replaceAll("-", "")}`;
+const password = randomUUID();
+const mongo = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
+const listener = createServer();
+listener.listen(0, "127.0.0.1");
+await once(listener, "listening");
+const port = listener.address().port;
+await new Promise((resolve) => listener.close(resolve));
+const base = `http://127.0.0.1:${port}`;
+const cookies = new Map();
+let child;
+async function start() {
+  child = spawn(process.execPath, ["--import", "tsx", "src/server.ts"], {
+    cwd: fileURLToPath(new URL(".", import.meta.url)),
+    windowsHide: true,
+    env: {
+      ...process.env,
+      NODE_ENV: "test",
+      PORT: String(port),
+      PUBLIC_ORIGIN: base,
+      MONGODB_URI: uri,
+      MONGODB_DATABASE: database,
+      DEMO_PASSWORD: password,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  // Do not echo process output: startup errors might contain connection credentials.
+  child.stderr.resume();
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Example startup timed out")), 20_000);
+    child.once("error", () => {
+      clearTimeout(timer);
+      reject(new Error("Example failed to start"));
+    });
+    child.once("exit", () => {
+      clearTimeout(timer);
+      reject(new Error("Example exited before startup"));
+    });
+    child.stdout.on("data", (chunk) => {
+      if (chunk.toString().includes("OAuth example ready")) {
+        clearTimeout(timer);
+        resolve();
+      }
+    });
+  });
+}
+async function stop() {
+  if (child && child.exitCode === null && child.signalCode === null) {
+    const closed = once(child, "exit");
+    child.kill("SIGTERM");
+    await closed;
+  }
+}
+async function http(path, { method = "GET", form, jar = cookies, origin = base } = {}) {
+  const url = new URL(path, base);
+  assert.equal(url.origin, base, "Never send test cookies to a different origin");
+  const response = await fetch(url, {
+    method,
+    redirect: "manual",
+    signal: AbortSignal.timeout(10_000),
+    headers: {
+      Cookie: [...jar].map(([name, value]) => `${name}=${value}`).join("; "),
+      ...(method === "POST" ? { Origin: origin } : {}),
+    },
+    ...(form ? { body: new URLSearchParams(form) } : {}),
+  });
+  for (const header of response.headers.getSetCookie()) {
+    const pair = header.split(";", 1)[0];
+    const separator = pair.indexOf("=");
+    const name = pair.slice(0, separator);
+    const value = pair.slice(separator + 1);
+    if (!value || /max-age=0/i.test(header)) jar.delete(name);
+    else jar.set(name, value);
+  }
+  return {
+    status: response.status,
+    location: response.headers.get("location"),
+    text: await response.text(),
+  };
+}
+function fields(html) {
+  return Object.fromEntries(
+    ["transaction", "csrf_token"].map((name) => {
+      const match = new RegExp(`name="${name}" value="([^"]+)"`).exec(html);
+      assert.ok(match, `Hosted form contains ${name}`);
+      return [name, match[1]];
+    })
+  );
+}
+async function consentForm() {
+  const start = await http("/demo/start");
+  assert.equal(start.status, 302);
+  const authorization = await http(start.location);
+  assert.equal(authorization.status, 302);
+  const page = await http(authorization.location);
+  assert.equal(page.status, 200);
+  return page;
+}
+try {
+  await mongo.connect();
+  await start();
+  assert.equal((await http("/auth/.well-known/oauth-authorization-server")).status, 200);
+  assert.equal((await http("/api/profile")).status, 401);
+  for (const path of ["/auth/login", "/auth/consent", "/auth/logout", "/demo/revoke"]) {
+    for (const variant of [path, `${path}/`, path.toUpperCase()]) {
+      assert.equal(
+        (await http(variant, { method: "POST", origin: "https://attacker.example" })).status,
+        403,
+        "Origin checks cover every equivalent Express route"
+      );
+    }
+  }
+  let page = await consentForm();
+  let form = fields(page.text);
+  const invalidCsrf = await http("/auth/login", {
+    method: "POST",
+    form: { ...form, csrf_token: "wrong", email: "user@example.com", password },
+  });
+  assert.equal(invalidCsrf.status, 400);
+  const failedLogin = await http("/auth/login", {
+    method: "POST",
+    form: { ...form, email: "user@example.com", password: "incorrect-password" },
+  });
+  assert.equal(failedLogin.status, 200);
+  assert.ok(failedLogin.text.includes("incorrect"));
+  form = fields(failedLogin.text);
+  const login = await http("/auth/login", {
+    method: "POST",
+    form: { ...form, email: "user@example.com", password },
+  });
+  assert.equal(login.status, 302);
+  page = await http(login.location);
+  const allowed = await http("/auth/consent", {
+    method: "POST",
+    form: { ...fields(page.text), decision: "allow" },
+  });
+  assert.equal(allowed.status, 302);
+  const altered = new URL(allowed.location);
+  altered.searchParams.set("state", "incorrect-state");
+  assert.equal((await http(altered)).status, 400);
+  assert.equal((await http(allowed.location, { jar: new Map() })).status, 400);
+
+  // Restart before callback: verifier, browser binding, code, and IdP session must survive.
+  await stop();
+  await start();
+  const callback = await http(allowed.location);
+  assert.equal(callback.status, 302);
+  assert.equal(callback.location, "/demo/profile");
+  assert.deepEqual(JSON.parse((await http(callback.location)).text), {
+    userId: "demo-user",
+    scopes: ["profile"],
+  });
+  assert.equal((await http(allowed.location)).status, 400, "Callback is single-use");
+  assert.equal((await http("/api/session")).status, 200);
+
+  // Restart again: both client access and browser session remain usable.
+  await stop();
+  await start();
+  assert.equal((await http("/demo/profile")).status, 200);
+  assert.equal((await http("/api/session")).status, 200);
+  const storedUser = await mongo
+    .db(database)
+    .collection("demo_users")
+    .findOne({ _id: "demo-user" });
+  assert.equal(typeof storedUser?.passwordHash, "string");
+  assert.ok(storedUser.passwordHash !== password && !("password" in storedUser));
+  assert.equal(
+    (await http("/demo/revoke", { method: "POST", origin: "https://attacker.example" })).status,
+    403
+  );
+  const retainedCookie = new Map(cookies);
+  assert.equal((await http("/demo/revoke", { method: "POST" })).status, 302);
+  assert.equal((await http("/demo/profile", { jar: retainedCookie })).status, 401);
+  const storedToken = await mongo
+    .db(database)
+    .collection("zero_auth_idp_access_tokens")
+    .findOne({ clientId: "demo-app" });
+  assert.equal(typeof storedToken?.revokedAt, "number");
+  assert.equal(
+    (await http("/auth/logout", { method: "POST", origin: "https://attacker.example" })).status,
+    403
+  );
+  assert.equal((await http("/auth/logout", { method: "POST" })).status, 204);
+  assert.equal((await http("/api/session", { jar: retainedCookie })).status, 401);
+
+  // Denial is bound to state too, and issues no client access.
+  page = await consentForm();
+  const secondLogin = await http("/auth/login", {
+    method: "POST",
+    form: { ...fields(page.text), email: "user@example.com", password },
+  });
+  page = await http(secondLogin.location);
+  const denied = await http("/auth/consent", {
+    method: "POST",
+    form: { ...fields(page.text), decision: "deny" },
+  });
+  const deniedCallback = await http(denied.location);
+  assert.equal(deniedCallback.status, 400);
+  assert.equal(JSON.parse(deniedCallback.text).error, "authorization_denied");
+  console.log(
+    "PASS: hosted login, PKCE callback, state/browser binding, two process restarts, revocation, logout, denial, hashed user"
+  );
+} finally {
+  await stop();
+  try {
+    if (!/^zero_auth_example_test_[a-f0-9]{32}$/.test(database))
+      throw new Error("Unsafe test cleanup target");
+    await mongo.db(database).dropDatabase();
+  } finally {
+    await mongo.close();
+  }
+}

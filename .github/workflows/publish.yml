@@ -13,6 +13,7 @@ on:
         options:
           - zero-auth
           - zero-auth-idp
+          - zero-auth-idp-mongodb
 
 jobs:
   publish:
@@ -43,6 +44,12 @@ jobs:
         run: npm run prepublishOnly --workspace @0-auth/zero-auth-idp
         if: github.event_name == 'workflow_dispatch' && inputs.package == 'zero-auth-idp'
 
+      - name: Run zero-auth-idp-mongodb verification & build
+        run: |
+          npm run build --workspace @0-auth/zero-auth-idp
+          npm run prepublishOnly --workspace @0-auth/zero-auth-idp-mongodb
+        if: github.event_name == 'workflow_dispatch' && inputs.package == 'zero-auth-idp-mongodb'
+
       - name: Publish zero-auth to npm
         run: npm publish --workspace @0-auth/zero-auth --access public --provenance
         if: github.event_name == 'release' || inputs.package == 'zero-auth'
@@ -52,5 +59,11 @@ jobs:
       - name: Publish zero-auth-idp to npm
         run: npm publish --workspace @0-auth/zero-auth-idp --access public --provenance
         if: github.event_name == 'workflow_dispatch' && inputs.package == 'zero-auth-idp'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish zero-auth-idp-mongodb to npm
+        run: npm publish --workspace @0-auth/zero-auth-idp-mongodb --access public --provenance
+        if: github.event_name == 'workflow_dispatch' && inputs.package == 'zero-auth-idp-mongodb'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

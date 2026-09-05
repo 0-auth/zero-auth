@@ -6,11 +6,15 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/server.ts",
-    "dev": "tsx watch src/server.ts"
+    "dev": "tsx watch src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node test-e2e.mjs"
   },
   "dependencies": {
     "@0-auth/zero-auth-idp": "file:../../packages/zero-auth-idp",
-    "express": "^4.21.2"
+    "@0-auth/zero-auth-idp-mongodb": "file:../../packages/zero-auth-idp-mongodb",
+    "express": "^4.21.2",
+    "mongodb": "^6.20.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

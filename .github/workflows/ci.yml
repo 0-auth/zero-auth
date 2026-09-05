@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
   test:
@@ -21,7 +21,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -40,3 +40,45 @@ jobs:
 
       - name: Run tests with coverage threshold
         run: npm run test:coverage
+
+  mongo-integration:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'quit(db.adminCommand({ping:1}).ok ? 0 : 1)'"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run MongoDB integration tests
+        run: npm run test:integration --workspace @0-auth/zero-auth-idp-mongodb
+        env:
+          MONGODB_URI: mongodb://127.0.0.1:27017
+
+      - name: Build IdP and MongoDB adapter
+        run: |
+          npm run build --workspace @0-auth/zero-auth-idp
+          npm run build --workspace @0-auth/zero-auth-idp-mongodb
+
+      - name: Verify runnable MongoDB example
+        working-directory: examples/express-idp
+        run: |
+          npm ci --ignore-scripts
+          npm run typecheck
+          npm test
+        env:
+          MONGODB_URI: mongodb://127.0.0.1:27017

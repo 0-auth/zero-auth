@@ -63,7 +63,7 @@ The hosted flow is:
 The client must use `response_type=code`, `code_challenge_method=S256`, and a
 registered redirect URI. The authorization code is short-lived and single-use.
 
-For a runnable application and curl walkthrough, see
+For a runnable MongoDB application with Docker Compose, hashed users, and a complete PKCE callback, see
 [`examples/express-idp`](../../examples/express-idp).
 
 ## Endpoints

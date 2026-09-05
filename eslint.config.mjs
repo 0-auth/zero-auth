@@ -27,11 +27,19 @@ export default [
 
   // ── Source files ─────────────────────────────────────────────────────────
   {
-    files: ["packages/zero-auth/src/**/*.ts", "packages/zero-auth-idp/src/**/*.ts"],
+    files: [
+      "packages/zero-auth/src/**/*.ts",
+      "packages/zero-auth-idp/src/**/*.ts",
+      "packages/zero-auth-idp-mongodb/src/**/*.ts",
+    ],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
-        project: ["./packages/zero-auth/tsconfig.json", "./packages/zero-auth-idp/tsconfig.json"],
+        project: [
+          "./packages/zero-auth/tsconfig.json",
+          "./packages/zero-auth-idp/tsconfig.json",
+          "./packages/zero-auth-idp-mongodb/tsconfig.json",
+        ],
         tsconfigRootDir: configDir,
       },
     },
@@ -41,13 +49,18 @@ export default [
 
   // ── Test files (separate tsconfig that includes tests/) ──────────────────
   {
-    files: ["packages/zero-auth/tests/**/*.ts", "packages/zero-auth-idp/tests/**/*.ts"],
+    files: [
+      "packages/zero-auth/tests/**/*.ts",
+      "packages/zero-auth-idp/tests/**/*.ts",
+      "packages/zero-auth-idp-mongodb/tests/**/*.ts",
+    ],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
         project: [
           "./packages/zero-auth/tsconfig.test.json",
           "./packages/zero-auth-idp/tsconfig.test.json",
+          "./packages/zero-auth-idp-mongodb/tsconfig.test.json",
         ],
         tsconfigRootDir: configDir,
       },

@@ -6,3 +6,9 @@ dist
 docs/.vitepress/cache
 docs/.vitepress/dist
 *.log
+**/node_modules
+**/dist
+**/coverage
+**/.env
+**/.env.*
+!**/.env.example
