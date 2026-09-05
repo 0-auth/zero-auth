@@ -1,0 +1,20 @@
+{
+  "name": "zero-auth-idp-express-example",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Runnable Express example for @0-auth/zero-auth-idp",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "dev": "tsx watch src/server.ts"
+  },
+  "dependencies": {
+    "@0-auth/zero-auth-idp": "file:../../packages/zero-auth-idp",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

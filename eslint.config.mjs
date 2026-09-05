@@ -9,10 +9,7 @@ const configDir = fileURLToPath(new URL(".", import.meta.url));
 
 const tsRules = {
   "@typescript-eslint/no-explicit-any": "error",
-  "@typescript-eslint/consistent-type-imports": [
-    "error",
-    { prefer: "type-imports" },
-  ],
+  "@typescript-eslint/consistent-type-imports": ["error", { prefer: "type-imports" }],
   "@typescript-eslint/no-unused-vars": [
     "error",
     { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
@@ -30,11 +27,11 @@ export default [
 
   // ── Source files ─────────────────────────────────────────────────────────
   {
-    files: ["packages/zero-auth/src/**/*.ts"],
+    files: ["packages/zero-auth/src/**/*.ts", "packages/zero-auth-idp/src/**/*.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
-        project: "./packages/zero-auth/tsconfig.json",
+        project: ["./packages/zero-auth/tsconfig.json", "./packages/zero-auth-idp/tsconfig.json"],
         tsconfigRootDir: configDir,
       },
     },
@@ -44,11 +41,14 @@ export default [
 
   // ── Test files (separate tsconfig that includes tests/) ──────────────────
   {
-    files: ["packages/zero-auth/tests/**/*.ts"],
+    files: ["packages/zero-auth/tests/**/*.ts", "packages/zero-auth-idp/tests/**/*.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
-        project: "./packages/zero-auth/tsconfig.test.json",
+        project: [
+          "./packages/zero-auth/tsconfig.test.json",
+          "./packages/zero-auth-idp/tsconfig.test.json",
+        ],
         tsconfigRootDir: configDir,
       },
     },
