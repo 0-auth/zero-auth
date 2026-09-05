@@ -11,8 +11,8 @@
     "test": "node test-e2e.mjs"
   },
   "dependencies": {
-    "@0-auth/zero-auth-idp": "file:../../packages/zero-auth-idp",
-    "@0-auth/zero-auth-idp-mongodb": "file:../../packages/zero-auth-idp-mongodb",
+    "@0-auth/zero-auth-idp": "0.1.0",
+    "@0-auth/zero-auth-idp-mongodb": "0.1.0",
     "express": "^4.21.2",
     "mongodb": "^6.20.0"
   },

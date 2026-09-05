@@ -9,7 +9,7 @@ Monorepo for the `@0-auth` packages.
 - [`@0-auth/zero-auth-idp`](./packages/zero-auth-idp/README.md) — OAuth authorization
   server with backend-hosted login and consent UI.
 - [`@0-auth/zero-auth-idp-mongodb`](./packages/zero-auth-idp-mongodb/README.md) —
-  persistent MongoDB storage for the authorization server (not published yet).
+  persistent MongoDB storage for the authorization server.
 
 Try the [runnable OAuth/MongoDB example](./examples/express-idp/README.md) with
 Docker Compose, a complete PKCE client, and application restart tests.

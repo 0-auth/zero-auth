@@ -47,9 +47,6 @@ docker compose -p zero-auth-idp-example -f examples/express-idp/docker-compose.y
 From the repository root:
 
 ```powershell
-npm ci
-npm run build --workspace @0-auth/zero-auth-idp
-npm run build --workspace @0-auth/zero-auth-idp-mongodb
 cd examples/express-idp
 npm ci
 $env:MONGODB_URI = "mongodb://127.0.0.1:27017"
@@ -58,9 +55,8 @@ $env:DEMO_PASSWORD = "choose-a-long-local-demo-password"
 npm start
 ```
 
-The local adapter is not published yet; this example uses repository `file:`
-dependencies. Build both packages before starting it. For Node execution, export
-environment variables as shown; `npm start` does not automatically load `.env`.
+For Node execution, export environment variables as shown; `npm start` does not
+automatically load `.env`.
 
 | Variable           | Default / requirement                                               |
 | ------------------ | ------------------------------------------------------------------- |
