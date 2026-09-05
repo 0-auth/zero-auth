@@ -14,7 +14,8 @@
   "homepage": "https://zero-auth.netlify.app/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/0-auth/zero-auth.git"
+    "url": "git+https://github.com/0-auth/zero-auth.git",
+    "directory": "packages/zero-auth-idp-mongodb"
   },
   "bugs": {
     "url": "https://github.com/0-auth/zero-auth/issues"

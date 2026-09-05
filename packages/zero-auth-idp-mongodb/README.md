@@ -3,15 +3,15 @@
 > [!NOTE]
 > This package only provides storage for `@0-auth/zero-auth-idp`. It does not
 > create users, hash passwords, or expose a MongoDB user model.
-> This adapter is not published yet. Use the repository example until release.
-> Unreleased schema change: `expiresAt` is now stored as a BSON date. Convert
-> numeric records from the earlier scaffold before reusing that development data.
+> Migration from the unreleased scaffold: `expiresAt` is stored as a BSON date.
+> Convert earlier numeric records before reusing that development data. No
+> automatic database migration runs on startup.
 
 MongoDB storage for the self-hosted OAuth authorization server. The core IdP
 package stays database-independent; this adapter persists sessions, temporary
 OAuth transactions, authorization codes, and access tokens.
 
-## Install (after release)
+## Install
 
 ```bash
 npm install @0-auth/zero-auth-idp @0-auth/zero-auth-idp-mongodb mongodb@6
@@ -76,7 +76,7 @@ cannot clean. Existing development records from that scaffold need their
 `expiresAt` converted to BSON dates before using this adapter; no automatic
 database migration runs on startup.
 
-See the [runnable MongoDB example](../../examples/express-idp/README.md) for Docker
+See the [runnable MongoDB example](https://github.com/0-auth/zero-auth/tree/master/examples/express-idp) for Docker
 Compose, hashed user authentication, a complete PKCE client, and restart testing.
 
 ## Integration tests
