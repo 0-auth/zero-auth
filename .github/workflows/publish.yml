@@ -4,6 +4,15 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      package:
+        description: Package to publish
+        required: true
+        type: choice
+        default: zero-auth
+        options:
+          - zero-auth
+          - zero-auth-idp
 
 jobs:
   publish:
@@ -26,10 +35,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run verification & build
+      - name: Run zero-auth verification & build
         run: npm run prepublishOnly --workspace @0-auth/zero-auth
+        if: github.event_name == 'release' || inputs.package == 'zero-auth'
 
-      - name: Publish package to npm
+      - name: Run zero-auth-idp verification & build
+        run: npm run prepublishOnly --workspace @0-auth/zero-auth-idp
+        if: github.event_name == 'workflow_dispatch' && inputs.package == 'zero-auth-idp'
+
+      - name: Publish zero-auth to npm
         run: npm publish --workspace @0-auth/zero-auth --access public --provenance
+        if: github.event_name == 'release' || inputs.package == 'zero-auth'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish zero-auth-idp to npm
+        run: npm publish --workspace @0-auth/zero-auth-idp --access public --provenance
+        if: github.event_name == 'workflow_dispatch' && inputs.package == 'zero-auth-idp'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
