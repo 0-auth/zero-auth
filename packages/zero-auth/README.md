@@ -207,7 +207,7 @@ deployment, testing, versioning, and releases.
 ```bash
 # Quick start (REST API example)
 cd examples/express-rest-api
-npm install
+npm ci
 npm start
 ```
 

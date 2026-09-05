@@ -17,24 +17,53 @@
  * Dev:  npm run dev           → auto-restart on changes
  */
 
+import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 import express from "express";
 import { createAuth } from "@0-auth/zero-auth";
+
+const scrypt = promisify(scryptCallback);
 
 // ─── In-Memory User Store (replace with a real DB) ───────────────────────────
 
 interface User {
   id: string;
   email: string;
-  password: string; // plain text for demo only — hash in production!
+  passwordHash: string;
   role: string;
 }
 
 const users: User[] = [
-  { id: "1", email: "admin@example.com", password: "admin123", role: "admin" },
-  { id: "2", email: "user@example.com", password: "user123", role: "user" },
+  {
+    id: "1",
+    email: "admin@example.com",
+    passwordHash: await hashPassword("admin123"),
+    role: "admin",
+  },
+  {
+    id: "2",
+    email: "user@example.com",
+    passwordHash: await hashPassword("user123"),
+    role: "user",
+  },
 ];
 
 let nextId = 3;
+
+async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString("hex");
+  const key = (await scrypt(password, salt, 64)) as Buffer;
+  return `${salt}:${key.toString("hex")}`;
+}
+
+async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
+  const [salt, keyHex] = storedHash.split(":");
+  if (!salt || !keyHex) return false;
+
+  const expected = Buffer.from(keyHex, "hex");
+  const actual = (await scrypt(password, salt, expected.length)) as Buffer;
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
 
 // ─── Auth Instance ───────────────────────────────────────────────────────────
 
@@ -52,18 +81,18 @@ const auth = createAuth({
 // ─── Express App ─────────────────────────────────────────────────────────────
 
 const app = express();
+app.disable("x-powered-by");
 app.use(express.json());
 
 // ── Public: Register ─────────────────────────────────────────────────────────
 
 app.post("/auth/register", async (req, res) => {
-  const { email, password, role } = req.body as {
+  const { email, password } = req.body as {
     email?: string;
     password?: string;
-    role?: string;
   };
 
-  if (!email || !password) {
+  if (typeof email !== "string" || typeof password !== "string") {
     res.status(400).json({ error: "email and password are required" });
     return;
   }
@@ -76,8 +105,8 @@ app.post("/auth/register", async (req, res) => {
   const user: User = {
     id: String(nextId++),
     email,
-    password,
-    role: role || "user",
+    passwordHash: await hashPassword(password),
+    role: "user",
   };
   users.push(user);
 
@@ -98,8 +127,12 @@ app.post("/auth/login", async (req, res) => {
     password?: string;
   };
 
-  const user = users.find((u) => u.email === email && u.password === password);
-  if (!user) {
+  const user = users.find((u) => u.email === email);
+  if (
+    typeof password !== "string" ||
+    !user ||
+    !(await verifyPassword(password, user.passwordHash))
+  ) {
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }

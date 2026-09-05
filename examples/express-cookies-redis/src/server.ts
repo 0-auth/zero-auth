@@ -162,7 +162,7 @@ app.post("/auth/register", async (req, res) => {
     password?: string;
   };
 
-  if (!email || !password) {
+  if (typeof email !== "string" || typeof password !== "string") {
     res.status(400).json({ error: "email and password are required" });
     return;
   }
@@ -199,7 +199,11 @@ app.post("/auth/login", async (req, res) => {
   };
 
   const user = users.find((u) => u.email === email);
-  if (!user || !(await verifyPassword(password || "", user.passwordHash))) {
+  if (
+    typeof password !== "string" ||
+    !user ||
+    !(await verifyPassword(password, user.passwordHash))
+  ) {
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }

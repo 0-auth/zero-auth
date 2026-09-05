@@ -11,7 +11,7 @@ detection.
 
 ```bash
 cd examples/express-rest-api
-npm install
+npm ci
 npm start
 ```
 
@@ -22,8 +22,9 @@ The server runs at `http://localhost:3000` and includes these demo users:
 | `admin@example.com` | `admin123` | `admin` |
 | `user@example.com` | `user123` | `user` |
 
-The example uses an in-memory user list and plain-text demo passwords. Do not
-copy that storage or password handling into production.
+The example uses an in-memory user list and hashes passwords with Node's built-in
+`scrypt`. New registrations always receive the `user` role. Replace the user
+store with your database before production.
 
 The example has development fallback secrets. In a real app, set secrets in
 the environment instead:

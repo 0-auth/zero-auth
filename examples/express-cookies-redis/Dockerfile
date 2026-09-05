@@ -1,27 +1,20 @@
-FROM node:22-alpine AS auth-build
+FROM node:22-alpine AS build
 
-WORKDIR /workspace
+WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY src ./src
-COPY tsconfig.json tsup.config.ts ./
+COPY tsconfig.json ./
 RUN npm run build
 
 FROM node:22-alpine
 
-WORKDIR /workspace
+WORKDIR /app
 ENV NODE_ENV=production
 
 COPY package*.json ./
-RUN npm install --omit=dev --ignore-scripts
-COPY --from=auth-build /workspace/dist ./dist
-
-COPY examples/express-cookies-redis/package*.json ./examples/express-cookies-redis/
-COPY examples/express-cookies-redis/src ./examples/express-cookies-redis/src
-COPY examples/express-cookies-redis/tsconfig.json ./examples/express-cookies-redis/
-
-WORKDIR /workspace/examples/express-cookies-redis
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts
+COPY --from=build /app/dist ./dist
 
 EXPOSE 3001
-CMD ["npm", "start"]
+CMD ["node", "dist/server.js"]

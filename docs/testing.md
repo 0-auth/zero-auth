@@ -144,7 +144,8 @@ The stateless example needs only Node.js:
 
 ~~~bash
 cd examples/express-rest-api
-npm install
+npm ci
+npm run typecheck
 npm test
 ~~~
 
@@ -153,7 +154,8 @@ The cookie example needs Redis:
 ~~~bash
 cd examples/express-cookies-redis
 docker compose up -d
-npm install
+npm ci
+npm run typecheck
 npm test
 docker compose down
 ~~~

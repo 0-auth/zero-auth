@@ -6,16 +6,17 @@ Stateless Bearer-token authentication for mobile apps, CLI tools, and SPAs.
 
 ```bash
 cd examples/express-rest-api
-npm install
+npm ci
 npm start
 ```
 
 Server starts on **http://localhost:3000**.
 
-This example is a stateless bearer-token reference. It keeps users in memory
-and uses demo password handling, so replace both with a database and a real
-password-hashing policy before production. Use the cookie + Redis example for
-HTTP-only cookies, CSRF protection, and refresh-token replay detection.
+This example is a stateless bearer-token reference. It keeps users in memory but
+hashes passwords with Node's built-in `scrypt`; replace the user store with a
+database before production. New registrations always receive the `user` role.
+Use the cookie + Redis example for HTTP-only cookies, CSRF protection, and
+refresh-token replay detection.
 
 ## Seed Users
 
@@ -33,7 +34,7 @@ HTTP-only cookies, CSRF protection, and refresh-token replay detection.
 ```bash
 curl -X POST http://localhost:3000/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"new@example.com","password":"pass123","role":"user"}'
+  -d '{"email":"new@example.com","password":"choose-a-long-password"}'
 ```
 
 **Response** `201`:
@@ -137,12 +138,13 @@ Returns the decoded payload without verifying the signature — useful for debug
 ## Run the automated example test
 
 ~~~bash
+npm run typecheck
 npm test
 ~~~
 
-The test starts the app on an ephemeral port and checks registration, login,
-protected access, missing-token behavior, optional authentication, refresh,
-RBAC, and token inspection.
+The test starts the app on an ephemeral port and checks registration cannot
+self-assign an admin role, login, protected access, missing-token behavior,
+optional authentication, refresh, RBAC, and token inspection.
 
 ## Features Demonstrated
 

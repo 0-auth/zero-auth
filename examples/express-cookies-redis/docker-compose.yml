@@ -16,8 +16,8 @@ services:
   app:
     profiles: ["container"]
     build:
-      context: ../..
-      dockerfile: examples/express-cookies-redis/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     env_file:
       - .env
     environment:

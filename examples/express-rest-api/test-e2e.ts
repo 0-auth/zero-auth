@@ -23,13 +23,18 @@ async function runTests() {
       body: JSON.stringify({
         email: "testuser@example.com",
         password: "secretpassword",
-        role: "user",
+        role: "admin",
       }),
     });
     const regData = (await regRes.json()) as any;
     console.log("Register status:", regRes.status);
     console.log("Register token pair received:", !!regData.accessToken, !!regData.refreshToken);
-    if (regRes.status !== 201 || !regData.accessToken || !regData.refreshToken) {
+    if (
+      regRes.status !== 201 ||
+      !regData.accessToken ||
+      !regData.refreshToken ||
+      regData.user.role !== "user"
+    ) {
       throw new Error("Register failed");
     }
 

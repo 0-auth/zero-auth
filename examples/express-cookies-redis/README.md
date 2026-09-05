@@ -20,7 +20,7 @@ docker compose up -d
 cp .env.example .env
 
 # 3. Install dependencies
-npm install
+npm ci
 
 # 4. Start the server
 npm start
@@ -30,8 +30,8 @@ Server starts on **http://localhost:3001**.
 
 ## Deploy with Docker Compose
 
-This repository includes a production-mode container for the example. It uses
-the root package as a local dependency, so run Compose from this directory:
+This repository includes a production-mode container for the example. Run
+Compose from this directory:
 
 ```bash
 cd examples/express-cookies-redis
@@ -221,6 +221,7 @@ curl -X DELETE http://localhost:3001/admin/users/2 \
 ## Run the automated example test
 
 ~~~bash
+npm run typecheck
 npm test
 ~~~
 
