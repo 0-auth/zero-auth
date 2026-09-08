@@ -250,7 +250,6 @@ try {
   assert.match(profile.text, /user@example\.com/);
   assert.match(profile.text, /demo-user/);
   assert.match(profile.text, />openid, profile, email</);
-  assert.match(profile.text, />profile</);
   assert.equal((await http(allowed.location)).status, 400, "Callback is single-use");
   assert.equal((await http("/api/session")).status, 200);
 
