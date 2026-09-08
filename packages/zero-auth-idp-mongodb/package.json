@@ -1,6 +1,6 @@
 {
   "name": "@0-auth/zero-auth-idp-mongodb",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MongoDB storage adapter for @0-auth/zero-auth-idp",
   "author": "Darshan Kinge",
   "license": "MIT",
@@ -52,11 +52,11 @@
     "prepublishOnly": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "peerDependencies": {
-    "@0-auth/zero-auth-idp": "^0.1.0",
+    "@0-auth/zero-auth-idp": "^0.2.0",
     "mongodb": "^6.20.0"
   },
   "devDependencies": {
-    "@0-auth/zero-auth-idp": "0.1.0",
+    "@0-auth/zero-auth-idp": "0.2.0",
     "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",

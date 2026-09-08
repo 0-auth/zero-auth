@@ -30,15 +30,17 @@ function page(title: string, content: string): string {
 
 function renderLogin(context: LoginContext): string {
   const error = context.error ? `<p role="alert">${escapeHtml(context.error)}</p>` : "";
+  const email = context.email ? ` value="${escapeHtml(context.email)}"` : "";
 
   return page(
     "Sign in",
     `<h1>Sign in</h1>
+<p>Continue to ${escapeHtml(context.clientName)}.</p>
 ${error}
 <form method="post" action="${escapeHtml(context.action)}">
   <input type="hidden" name="transaction" value="${escapeHtml(context.transactionId)}">
   <input type="hidden" name="csrf_token" value="${escapeHtml(context.csrfToken)}">
-  <label>Email <input type="email" name="email" autocomplete="email" required></label>
+  <label>Email <input type="email" name="email" autocomplete="email"${email} required></label>
   <label>Password <input type="password" name="password" autocomplete="current-password" required></label>
   <button type="submit">Continue</button>
 </form>`

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0 - 2026-09-08
+
+### Changed
+
+- Align the adapter with the `@0-auth/zero-auth-idp` 0.2.0 release.
+
 ## 0.1.0 - 2026-09-05
 
 ### Added

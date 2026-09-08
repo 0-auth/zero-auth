@@ -1,18 +1,18 @@
 FROM node:22-bookworm-slim AS build
-WORKDIR /repo
+WORKDIR /app
 COPY package.json package-lock.json ./
-COPY packages ./packages
-COPY eslint.config.mjs ./
-RUN --mount=type=cache,target=/root/.npm npm ci --ignore-scripts --no-audit --no-fund --maxsockets=5 && npm run build
-COPY examples/express-idp ./examples/express-idp
-RUN --mount=type=cache,target=/root/.npm cd examples/express-idp && npm ci --ignore-scripts --no-audit --no-fund --maxsockets=5 && npm run typecheck
+RUN --mount=type=cache,target=/root/.npm npm ci --ignore-scripts --no-audit --no-fund --maxsockets=5
+COPY tsconfig.json ./
+COPY src ./src
+RUN npm run build && npm prune --omit=dev
 
 FROM node:22-bookworm-slim
-WORKDIR /repo
-COPY --from=build /repo/node_modules ./node_modules
-COPY --from=build /repo/packages ./packages
-COPY --from=build /repo/examples/express-idp ./examples/express-idp
-WORKDIR /repo/examples/express-idp
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --chown=node:node --from=build /app/package.json ./package.json
+COPY --chown=node:node --from=build /app/node_modules ./node_modules
+COPY --chown=node:node --from=build /app/dist ./dist
 USER node
 EXPOSE 3001
-CMD ["node", "--import", "tsx", "src/server.ts"]
+HEALTHCHECK --interval=5s --timeout=7s --retries=20 CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||3001)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+CMD ["node", "dist/server.js"]

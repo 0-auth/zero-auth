@@ -5,14 +5,15 @@
   "description": "Runnable Express example for @0-auth/zero-auth-idp",
   "type": "module",
   "scripts": {
-    "start": "tsx src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node test-e2e.mjs"
+    "test": "npm run build && node test-e2e.mjs"
   },
   "dependencies": {
-    "@0-auth/zero-auth-idp": "0.1.0",
-    "@0-auth/zero-auth-idp-mongodb": "0.1.0",
+    "@0-auth/zero-auth-idp": "0.2.0",
+    "@0-auth/zero-auth-idp-mongodb": "0.2.0",
     "express": "^5.2.1",
     "mongodb": "^6.20.0"
   },

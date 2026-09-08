@@ -2,7 +2,7 @@ import { createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import express, { type Request, type RequestHandler } from "express";
 import { MongoClient } from "mongodb";
-import { createIdentityProvider } from "@0-auth/zero-auth-idp";
+import { createIdentityProvider, type IdentityProviderUi } from "@0-auth/zero-auth-idp";
 import { createMongoOAuthStorage } from "@0-auth/zero-auth-idp-mongodb";
 
 const port = Number(process.env["PORT"] ?? 3001);
@@ -15,6 +15,8 @@ if (origin.origin !== base || !["http:", "https:"].includes(origin.protocol)) {
 if (process.env["NODE_ENV"] === "production" && origin.protocol !== "https:") {
   throw new Error("Use an HTTPS PUBLIC_ORIGIN in production");
 }
+const trustProxy = process.env["TRUST_PROXY"] ?? "0";
+if (!new Set(["0", "1"]).has(trustProxy)) throw new Error("TRUST_PROXY must be 0 or 1");
 const password = process.env["DEMO_PASSWORD"];
 if (!password || password.length < 12)
   throw new Error("Set DEMO_PASSWORD to at least 12 characters");
@@ -50,6 +52,66 @@ if (!(await users.findOne({ _id: "demo-user" }))) {
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const random = () => randomBytes(32).toString("base64url");
+const internalBase = `http://127.0.0.1:${port}`;
+const idpCookieName = "idp_session";
+const escapeHtml = (value: string) =>
+  value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        character
+      ]!
+  );
+const appPage = (title: string, content: string) => `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escapeHtml(title)} · Zero Auth</title>
+    <link rel="stylesheet" href="/app.css">
+  </head>
+  <body>
+    <main class="shell">
+      <a class="brand" href="/" aria-label="Zero Auth demo home"><span>0</span> Zero Auth</a>
+      ${content}
+    </main>
+  </body>
+</html>`;
+function sendStatusPage(
+  response: express.Response,
+  status: number,
+  title: string,
+  eyebrow: string,
+  heading: string,
+  message: string,
+  actionHref: string,
+  actionLabel: string
+) {
+  response
+    .status(status)
+    .type("html")
+    .send(
+      appPage(
+        title,
+        `<section class="card"><p class="eyebrow">${escapeHtml(eyebrow)}</p><h1>${escapeHtml(heading)}</h1><p class="lede">${escapeHtml(message)}</p><div class="actions"><a class="button" href="${escapeHtml(actionHref)}">${escapeHtml(actionLabel)}</a></div></section>`
+      )
+    );
+}
+// Hosted pages stay deliberately semantic because the package's CSP blocks page-supplied styles.
+const hostedPage = (title: string, content: string) => `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escapeHtml(title)} · Zero Auth Identity</title>
+  </head>
+  <body>
+    <main>
+      <p><strong>Zero Auth Identity</strong></p>
+      ${content}
+    </main>
+  </body>
+</html>`;
 const cookieOptions = {
   httpOnly: true,
   secure: origin.protocol === "https:",
@@ -65,10 +127,66 @@ function cookie(req: Request, name: string): string {
       ?.slice(name.length + 1) ?? ""
   );
 }
+function hasAllowedMutationOrigin(req: Request): boolean {
+  if (process.env["NODE_ENV"] === "development") return true;
+  const requestOrigin = req.get("origin");
+  if (requestOrigin === base || (!requestOrigin && req.get("sec-fetch-site") === "same-origin")) {
+    return true;
+  }
+  if (process.env["NODE_ENV"] === "production" || !requestOrigin) return false;
+  try {
+    const candidate = new URL(requestOrigin);
+    const loopback = new Set(["localhost", "127.0.0.1", "[::1]"]);
+    return (
+      loopback.has(origin.hostname) &&
+      loopback.has(candidate.hostname) &&
+      candidate.protocol === origin.protocol &&
+      candidate.port === origin.port
+    );
+  } catch {
+    return false;
+  }
+}
+const hostedUi: IdentityProviderUi = {
+  renderLogin: (context) =>
+    hostedPage(
+      "Sign in",
+      `<p>Continue to <strong>Demo app</strong>.</p>
+      <h1>Sign in</h1>
+      ${context.error ? `<p role="alert">${escapeHtml(context.error)}</p>` : ""}
+      <form method="post" action="${escapeHtml(context.action)}">
+        <input type="hidden" name="transaction" value="${escapeHtml(context.transactionId)}">
+        <input type="hidden" name="csrf_token" value="${escapeHtml(context.csrfToken)}">
+        <p><label>Email<br><input type="email" name="email" autocomplete="email" required></label></p>
+        <p><label>Password<br><input type="password" name="password" autocomplete="current-password" required></label></p>
+        <button type="submit">Continue</button>
+      </form>`
+    ),
+  renderConsent: (context) =>
+    hostedPage(
+      "Authorize application",
+      `<p>Signed in to <strong>Zero Auth Identity</strong>.</p>
+      <h1>Allow ${escapeHtml(context.clientName)}?</h1>
+      <p>The application is requesting permission to:</p>
+      <ul>${context.scopes.map((scope) => `<li>${escapeHtml(scope)}</li>`).join("")}</ul>
+      <form method="post" action="${escapeHtml(context.action)}">
+        <input type="hidden" name="transaction" value="${escapeHtml(context.transactionId)}">
+        <input type="hidden" name="csrf_token" value="${escapeHtml(context.csrfToken)}">
+        <button type="submit" name="decision" value="deny">Deny</button>
+        <button type="submit" name="decision" value="allow">Allow Demo app</button>
+      </form>`
+    ),
+  renderError: (context) =>
+    hostedPage(
+      "Authentication error",
+      `<h1>We could not continue</h1><p role="alert">${escapeHtml(context.message)}</p><p><a href="/">Return to Demo app</a></p>`
+    ),
+};
 const idp = createIdentityProvider({
   issuer: `${base}/auth`,
   storage,
-  cookie: cookieOptions,
+  cookie: { ...cookieOptions, name: idpCookieName },
+  ui: hostedUi,
   clients: [
     {
       clientId: "demo-app",
@@ -100,20 +218,25 @@ const pending = db.collection<{
 const sessions = db.collection<{ _id: string; accessToken: string; expiresAt: Date }>(
   "demo_client_sessions"
 );
+const loginAttempts = db.collection<{ _id: string; count: number; expiresAt: Date }>(
+  "demo_login_attempts"
+);
 await Promise.all([
   pending.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+  loginAttempts.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
 ]);
 
 const app = express();
 app.disable("x-powered-by");
+if (trustProxy === "1") app.set("trust proxy", 1);
 app.use((_req, res, next) => {
   res.set({
     "Cache-Control": "no-store",
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
     "Content-Security-Policy":
-      "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      "default-src 'none'; style-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
   });
   next();
 });
@@ -126,29 +249,118 @@ const route =
 app.use((req, res, next) => {
   if (
     req.method === "POST" &&
-    ["/auth/login", "/auth/consent", "/auth/logout", "/demo/revoke"].includes(
+    ["/auth/login", "/auth/consent", "/auth/logout", "/demo/revoke", "/demo/logout"].includes(
       req.path.toLowerCase().replace(/\/+$/, "")
     ) &&
-    req.get("origin") !== base
+    !hasAllowedMutationOrigin(req)
   ) {
-    res.status(403).json({ error: "invalid_origin" });
+    sendStatusPage(
+      res,
+      403,
+      "Open the canonical demo URL",
+      "Request blocked",
+      "This form came from a different browser origin.",
+      `Open ${base} and try the action again.`,
+      base,
+      "Open Demo app"
+    );
     return;
   }
   next();
 });
+// ponytail: fixed windows can allow a boundary burst; use a rolling limiter if that becomes material.
+const loginWindowMs = 10 * 60_000;
+app.post(
+  "/auth/login",
+  express.urlencoded({ extended: false, limit: "16kb" }),
+  (req, res, next) => {
+    void (async () => {
+      const loginEmail = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+      const bucket = Math.floor(Date.now() / loginWindowMs);
+      const source = req.ip ?? req.socket.remoteAddress ?? "unknown";
+      const attempt = await loginAttempts.findOneAndUpdate(
+        { _id: hash(`${source}\0${loginEmail}\0${bucket}`) },
+        {
+          $inc: { count: 1 },
+          $setOnInsert: { expiresAt: new Date((bucket + 2) * loginWindowMs) },
+        },
+        { upsert: true, returnDocument: "after" }
+      );
+      if (attempt && attempt.count > 10) {
+        res.set(
+          "Retry-After",
+          String(Math.ceil(((bucket + 1) * loginWindowMs - Date.now()) / 1000))
+        );
+        sendStatusPage(
+          res,
+          429,
+          "Try again later",
+          "Identity provider",
+          "Too many sign-in attempts",
+          "Wait a few minutes, then start the sign-in flow again.",
+          "/",
+          "Return to Demo app"
+        );
+        return;
+      }
+      next();
+    })().catch(next);
+  }
+);
 app.use("/auth", idp.router());
-app.get("/health", (_req, res) => {
-  res.json({ ready: true });
+app.get(
+  "/health",
+  route(async (_req, res) => {
+    try {
+      await db.command({ ping: 1 });
+      res.json({ ready: true });
+    } catch {
+      res.status(503).json({ ready: false });
+    }
+  })
+);
+app.get("/app.css", (_req, res) => {
+  res.type("css").send(`
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #17211b; background: #f3f1e9; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top right, #dbead9, transparent 34rem), #f3f1e9; }
+    .shell { width: min(46rem, calc(100% - 2rem)); margin: 0 auto; padding: 2rem 0 5rem; }
+    .brand { display: inline-flex; align-items: center; gap: .6rem; color: inherit; font-weight: 750; text-decoration: none; letter-spacing: -.02em; }
+    .brand span { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; color: white; background: #17211b; }
+    .card { margin-top: 4rem; padding: clamp(1.5rem, 5vw, 3.5rem); border: 1px solid #cdd4c8; border-radius: 1.5rem; background: rgba(255,255,255,.78); box-shadow: 0 1.5rem 4rem rgba(38,55,43,.09); }
+    .eyebrow { margin: 0 0 1rem; color: #3f6a4b; font-size: .78rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { max-width: 15ch; margin: 0; font-size: clamp(2.2rem, 8vw, 4.5rem); line-height: .98; letter-spacing: -.065em; }
+    .lede { max-width: 36rem; margin: 1.5rem 0 0; color: #4c5c51; font-size: 1.1rem; line-height: 1.65; }
+    .actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 2rem; }
+    .button, button { display: inline-flex; justify-content: center; border: 1px solid #17211b; border-radius: 999px; padding: .75rem 1rem; color: white; background: #17211b; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+    .button.secondary, button.secondary { color: #17211b; background: transparent; }
+    .steps { display: grid; gap: 1rem; margin: 2.5rem 0 0; padding: 0; list-style: none; counter-reset: step; }
+    .steps li { display: grid; grid-template-columns: 2rem 1fr; gap: .75rem; align-items: start; color: #4c5c51; line-height: 1.5; }
+    .steps li::before { counter-increment: step; content: counter(step); display: grid; place-items: center; width: 2rem; height: 2rem; border: 1px solid #aebaac; border-radius: 50%; color: #17211b; font-weight: 800; }
+    .result { margin-top: 2rem; padding: 1.25rem; border-radius: 1rem; background: #e7efe4; }
+    .result dt { color: #57705d; font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .result dd { margin: .25rem 0 1rem; font-size: 1.1rem; }
+    form { display: inline; }
+    details { margin-top: 2rem; color: #4c5c51; }
+    summary { cursor: pointer; font-weight: 700; }
+    a:focus-visible, button:focus-visible { outline: 3px solid #e17440; outline-offset: 3px; }
+    @media (max-width: 34rem) { .card { margin-top: 2rem; } .actions > * { width: 100%; } .actions form button { width: 100%; } }
+  `);
 });
 app.get("/", (_req, res) => {
-  res.type("html")
-    .send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>OAuth MongoDB example</title></head><body><main>
-    <h1>OAuth MongoDB example</h1><p>Sign in as user@example.com using the password you configured.</p>
-    <p><a href="/demo/start">Sign in and authorize Demo app</a></p>
-    <p><a href="/demo/profile">Call the protected API</a> · <a href="/api/session">Check browser session</a></p>
-    <form action="/demo/revoke" method="post"><button>Revoke Demo app access</button></form>
-    <form action="/auth/logout" method="post"><button>End browser session</button></form>
-    </main></body></html>`);
+  res.type("html").send(
+    appPage(
+      "OAuth end-user flow",
+      `<section class="card">
+        <p class="eyebrow">Runnable OAuth example</p>
+        <h1>See an authorization flow end to end.</h1>
+        <p class="lede">Demo app will send you to Zero Auth Identity to sign in as <strong>user@example.com</strong>, review the requested access, and return here without exposing your password to the client.</p>
+        <div class="actions"><a class="button" href="/demo/start">Continue to identity provider</a><a class="button secondary" href="/demo/profile">View authorized profile</a></div>
+        <ol class="steps"><li>Demo app creates state, a browser binding, and a PKCE challenge.</li><li>The identity provider authenticates you and asks for consent.</li><li>Demo app validates the callback and calls the protected API.</li></ol>
+        <details><summary>Existing session controls</summary><div class="actions"><form action="/demo/revoke" method="post"><button class="secondary" type="submit">Revoke app access</button></form><form action="/demo/logout" method="post"><button class="secondary" type="submit">End identity session</button></form></div></details>
+      </section>`
+    )
+  );
 });
 app.get(
   "/demo/start",
@@ -182,7 +394,16 @@ app.get(
     const state = typeof req.query.state === "string" ? req.query.state : "";
     const browser = cookie(req, "demo_flow");
     if (!state || !browser) {
-      res.status(400).json({ error: "invalid_state" });
+      sendStatusPage(
+        res,
+        400,
+        "Authorization expired",
+        "Demo app",
+        "This authorization request cannot continue.",
+        "The request expired or no longer matches this browser. Start again to create a fresh, protected request.",
+        "/demo/start",
+        "Start again"
+      );
       return;
     }
     const flow = await pending.findOneAndDelete({
@@ -191,19 +412,46 @@ app.get(
       expiresAt: { $gt: new Date() },
     });
     if (!flow) {
-      res.status(400).json({ error: "invalid_state" });
+      sendStatusPage(
+        res,
+        400,
+        "Authorization expired",
+        "Demo app",
+        "This authorization request cannot continue.",
+        "The request expired, was already used, or no longer matches this browser.",
+        "/demo/start",
+        "Start again"
+      );
       return;
     }
     res.clearCookie("demo_flow", cookieOptions);
     if (req.query.error) {
-      res.status(400).json({ error: "authorization_denied" });
+      sendStatusPage(
+        res,
+        400,
+        "Access denied",
+        "Demo app",
+        "No access was granted.",
+        "You denied the request. Demo app did not receive an access token.",
+        "/",
+        "Return home"
+      );
       return;
     }
     if (typeof req.query.code !== "string") {
-      res.status(400).json({ error: "missing_code" });
+      sendStatusPage(
+        res,
+        400,
+        "Missing authorization code",
+        "Demo app",
+        "The identity provider response was incomplete.",
+        "Start again to create a fresh authorization request.",
+        "/demo/start",
+        "Start again"
+      );
       return;
     }
-    const response = await fetch(`${base}/auth/token`, {
+    const response = await fetch(`${internalBase}/auth/token`, {
       method: "POST",
       redirect: "error",
       signal: AbortSignal.timeout(5000),
@@ -222,7 +470,16 @@ app.get(
       !Number.isFinite(token.expires_in) ||
       token.expires_in! <= 0
     ) {
-      res.status(502).json({ error: "token_exchange_failed" });
+      sendStatusPage(
+        res,
+        502,
+        "Authorization unavailable",
+        "Demo app",
+        "We could not finish authorization.",
+        "Try the flow again. If the problem continues, check the identity provider service.",
+        "/demo/start",
+        "Try again"
+      );
       return;
     }
     const session = random();
@@ -243,15 +500,43 @@ app.get(
       expiresAt: { $gt: new Date() },
     });
     if (!session) {
-      res.status(401).json({ error: "sign_in_required" });
+      sendStatusPage(
+        res,
+        401,
+        "Authorization required",
+        "Demo app",
+        "Authorize Demo app first.",
+        "No active client session was found in this browser.",
+        "/demo/start",
+        "Continue to identity provider"
+      );
       return;
     }
-    const response = await fetch(`${base}/api/profile`, {
+    const response = await fetch(`${internalBase}/api/profile`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
       redirect: "error",
       signal: AbortSignal.timeout(5000),
     });
-    res.status(response.status).json(await response.json());
+    const profile = (await response.json()) as { userId?: string; scopes?: string[] };
+    if (!response.ok || typeof profile.userId !== "string" || !Array.isArray(profile.scopes)) {
+      sendStatusPage(
+        res,
+        502,
+        "Profile unavailable",
+        "Demo app",
+        "The protected API rejected this session.",
+        "Authorize again to obtain fresh access.",
+        "/demo/start",
+        "Authorize again"
+      );
+      return;
+    }
+    res.type("html").send(
+      appPage(
+        "Authorized profile",
+        `<section class="card"><p class="eyebrow">Authorization complete</p><h1>Demo app can read your profile.</h1><p class="lede">The access token stayed on the server. This page contains only the protected resource response.</p><dl class="result"><dt>User</dt><dd>${escapeHtml(profile.userId)}</dd><dt>Granted scopes</dt><dd>${profile.scopes.map(escapeHtml).join(", ")}</dd></dl><div class="actions"><a class="button secondary" href="/">Return home</a><form action="/demo/revoke" method="post"><button type="submit">Revoke app access</button></form><form action="/demo/logout" method="post"><button class="secondary" type="submit">End identity session</button></form></div></section>`
+      )
+    );
   })
 );
 app.post(
@@ -260,19 +545,54 @@ app.post(
     const key = hash(cookie(req, "demo_session"));
     const session = await sessions.findOne({ _id: key });
     if (session) {
-      const response = await fetch(`${base}/auth/revoke`, {
+      const response = await fetch(`${internalBase}/auth/revoke`, {
         method: "POST",
         redirect: "error",
         signal: AbortSignal.timeout(5000),
         body: new URLSearchParams({ client_id: "demo-app", token: session.accessToken }),
       });
       if (!response.ok) {
-        res.status(502).json({ error: "revocation_failed" });
+        sendStatusPage(
+          res,
+          502,
+          "Revocation unavailable",
+          "Demo app",
+          "Access could not be revoked.",
+          "Try again before closing this browser session.",
+          "/demo/profile",
+          "Try again"
+        );
         return;
       }
       await sessions.deleteOne({ _id: key });
     }
     res.clearCookie("demo_session", cookieOptions);
+    res.redirect("/");
+  })
+);
+app.post(
+  "/demo/logout",
+  route(async (req, res) => {
+    const response = await fetch(`${internalBase}/auth/logout`, {
+      method: "POST",
+      redirect: "error",
+      signal: AbortSignal.timeout(5000),
+      headers: { Cookie: req.headers.cookie ?? "", Origin: base },
+    });
+    if (!response.ok) {
+      sendStatusPage(
+        res,
+        502,
+        "Sign out unavailable",
+        "Identity provider",
+        "The identity session could not be ended.",
+        "Try again before leaving the demo.",
+        "/demo/profile",
+        "Return to profile"
+      );
+      return;
+    }
+    res.clearCookie(idpCookieName, cookieOptions);
     res.redirect("/");
   })
 );
@@ -282,8 +602,25 @@ app.get("/api/session", idp.requireSession(), (req, res) => {
 app.get("/api/profile", idp.authenticateBearer(["profile"]), (req, res) => {
   res.json({ userId: req.oauth?.user.id, scopes: req.oauth?.scopes });
 });
-app.use((_error: unknown, _req: Request, res: express.Response, _next: express.NextFunction) => {
-  res.status(500).json({ error: "request_failed" });
+app.use((_error: unknown, req: Request, res: express.Response, next: express.NextFunction) => {
+  if (res.headersSent) {
+    next(_error);
+    return;
+  }
+  if (req.path.startsWith("/api/") || req.path === "/health") {
+    res.status(500).json({ error: "request_failed" });
+    return;
+  }
+  sendStatusPage(
+    res,
+    500,
+    "Request failed",
+    "Zero Auth demo",
+    "Something went wrong.",
+    "Try the flow again. No credentials or tokens were displayed.",
+    "/",
+    "Return home"
+  );
 });
 const server = app.listen(port, "0.0.0.0", () => console.log(`OAuth example ready at ${base}`));
 for (const signal of ["SIGTERM", "SIGINT"] as const) {

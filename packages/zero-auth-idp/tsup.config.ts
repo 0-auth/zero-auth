@@ -13,8 +13,8 @@ export default defineConfig({
   outDir: "dist",
   banner: {
     js: `/**
- * zero-auth-idp v0.1.0
- * A minimal self-hosted OAuth authorization server for Express
+ * zero-auth-idp v0.2.0
+ * A minimal self-hosted OAuth/OIDC authorization server for Express
  * MIT License
  */`,
   },

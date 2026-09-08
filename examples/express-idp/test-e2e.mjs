@@ -20,7 +20,7 @@ const base = `http://127.0.0.1:${port}`;
 const cookies = new Map();
 let child;
 async function start() {
-  child = spawn(process.execPath, ["--import", "tsx", "src/server.ts"], {
+  child = spawn(process.execPath, ["dist/server.js"], {
     cwd: fileURLToPath(new URL(".", import.meta.url)),
     windowsHide: true,
     env: {
@@ -61,7 +61,10 @@ async function stop() {
     await closed;
   }
 }
-async function http(path, { method = "GET", form, jar = cookies, origin = base } = {}) {
+async function http(
+  path,
+  { method = "GET", form, jar = cookies, origin = base, requestHeaders = {} } = {}
+) {
   const url = new URL(path, base);
   assert.equal(url.origin, base, "Never send test cookies to a different origin");
   const response = await fetch(url, {
@@ -70,7 +73,8 @@ async function http(path, { method = "GET", form, jar = cookies, origin = base }
     signal: AbortSignal.timeout(10_000),
     headers: {
       Cookie: [...jar].map(([name, value]) => `${name}=${value}`).join("; "),
-      ...(method === "POST" ? { Origin: origin } : {}),
+      ...(method === "POST" && origin ? { Origin: origin } : {}),
+      ...requestHeaders,
     },
     ...(form ? { body: new URLSearchParams(form) } : {}),
   });
@@ -85,6 +89,9 @@ async function http(path, { method = "GET", form, jar = cookies, origin = base }
   return {
     status: response.status,
     location: response.headers.get("location"),
+    contentType: response.headers.get("content-type"),
+    contentSecurityPolicy: response.headers.get("content-security-policy"),
+    retryAfter: response.headers.get("retry-after"),
     text: await response.text(),
   };
 }
@@ -109,15 +116,72 @@ async function consentForm() {
 try {
   await mongo.connect();
   await start();
+  const health = await http("/health");
+  assert.equal(health.status, 200);
+  assert.deepEqual(JSON.parse(health.text), { ready: true });
+  const home = await http("/");
+  assert.equal(home.status, 200);
+  assert.match(home.text, /Continue to identity provider/);
+  assert.match(home.contentSecurityPolicy, /style-src 'self'/);
+  assert.match((await http("/app.css")).contentType, /^text\/css/);
   assert.equal((await http("/auth/.well-known/oauth-authorization-server")).status, 200);
   assert.equal((await http("/api/profile")).status, 401);
-  for (const path of ["/auth/login", "/auth/consent", "/auth/logout", "/demo/revoke"]) {
+  for (const path of [
+    "/auth/login",
+    "/auth/consent",
+    "/auth/logout",
+    "/demo/revoke",
+    "/demo/logout",
+  ]) {
     for (const variant of [path, `${path}/`, path.toUpperCase()]) {
       assert.equal(
         (await http(variant, { method: "POST", origin: "https://attacker.example" })).status,
         403,
         "Origin checks cover every equivalent Express route"
       );
+    }
+  }
+  assert.equal(
+    (
+      await http("/demo/revoke", {
+        method: "POST",
+        origin: `http://localhost:${port}`,
+        jar: new Map(),
+      })
+    ).status,
+    302,
+    "Localhost and 127.0.0.1 are equivalent outside production"
+  );
+  assert.equal(
+    (
+      await http("/demo/revoke", {
+        method: "POST",
+        origin: null,
+        requestHeaders: { "Sec-Fetch-Site": "same-origin" },
+        jar: new Map(),
+      })
+    ).status,
+    302,
+    "Same-origin browser metadata covers clients that omit Origin"
+  );
+  let limitedPage = await consentForm();
+  let limitedForm = fields(limitedPage.text);
+  for (let attempt = 1; attempt <= 11; attempt += 1) {
+    const response = await http("/auth/login", {
+      method: "POST",
+      form: {
+        ...limitedForm,
+        email: "limited@example.com",
+        password: "incorrect-password",
+      },
+    });
+    if (attempt <= 10) {
+      assert.equal(response.status, 200);
+      limitedForm = fields(response.text);
+    } else {
+      assert.equal(response.status, 429);
+      assert.match(response.text, /Too many sign-in attempts/);
+      assert.ok(Number(response.retryAfter) > 0);
     }
   }
   let page = await consentForm();
@@ -156,10 +220,12 @@ try {
   const callback = await http(allowed.location);
   assert.equal(callback.status, 302);
   assert.equal(callback.location, "/demo/profile");
-  assert.deepEqual(JSON.parse((await http(callback.location)).text), {
-    userId: "demo-user",
-    scopes: ["profile"],
-  });
+  const profile = await http(callback.location);
+  assert.equal(profile.status, 200);
+  assert.match(profile.contentType, /^text\/html/);
+  assert.match(profile.text, /Demo app can read your profile/);
+  assert.match(profile.text, /demo-user/);
+  assert.match(profile.text, />profile</);
   assert.equal((await http(allowed.location)).status, 400, "Callback is single-use");
   assert.equal((await http("/api/session")).status, 200);
 
@@ -186,11 +252,7 @@ try {
     .collection("zero_auth_idp_access_tokens")
     .findOne({ clientId: "demo-app" });
   assert.equal(typeof storedToken?.revokedAt, "number");
-  assert.equal(
-    (await http("/auth/logout", { method: "POST", origin: "https://attacker.example" })).status,
-    403
-  );
-  assert.equal((await http("/auth/logout", { method: "POST" })).status, 204);
+  assert.equal((await http("/demo/logout", { method: "POST", jar: retainedCookie })).status, 302);
   assert.equal((await http("/api/session", { jar: retainedCookie })).status, 401);
 
   // Denial is bound to state too, and issues no client access.
@@ -206,9 +268,9 @@ try {
   });
   const deniedCallback = await http(denied.location);
   assert.equal(deniedCallback.status, 400);
-  assert.equal(JSON.parse(deniedCallback.text).error, "authorization_denied");
+  assert.match(deniedCallback.text, /No access was granted/);
   console.log(
-    "PASS: hosted login, PKCE callback, state/browser binding, two process restarts, revocation, logout, denial, hashed user"
+    "PASS: deployable UI, login throttling, PKCE callback, state/browser binding, two process restarts, revocation, logout, denial, hashed user"
   );
 } finally {
   await stop();
