@@ -1,6 +1,7 @@
-import { createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
+import { createHash, createPrivateKey, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import express, { type Request, type RequestHandler } from "express";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 import { MongoClient } from "mongodb";
 import { createIdentityProvider, type IdentityProviderUi } from "@0-auth/zero-auth-idp";
 import { createMongoOAuthStorage } from "@0-auth/zero-auth-idp-mongodb";
@@ -20,6 +21,14 @@ if (!new Set(["0", "1"]).has(trustProxy)) throw new Error("TRUST_PROXY must be 0
 const password = process.env["DEMO_PASSWORD"];
 if (!password || password.length < 12)
   throw new Error("Set DEMO_PASSWORD to at least 12 characters");
+const oidcPrivateKeyBase64 = process.env["OIDC_PRIVATE_KEY_BASE64"];
+if (!oidcPrivateKeyBase64) throw new Error("Set OIDC_PRIVATE_KEY_BASE64 to a PKCS8 RSA key");
+let oidcSigningKey;
+try {
+  oidcSigningKey = createPrivateKey(Buffer.from(oidcPrivateKeyBase64, "base64"));
+} catch {
+  throw new Error("OIDC_PRIVATE_KEY_BASE64 must contain a base64-encoded PKCS8 RSA key");
+}
 const mongo = new MongoClient(process.env["MONGODB_URI"] ?? "mongodb://127.0.0.1:27017", {
   serverSelectionTimeoutMS: 5000,
 });
@@ -53,14 +62,13 @@ if (!(await users.findOne({ _id: "demo-user" }))) {
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const random = () => randomBytes(32).toString("base64url");
 const internalBase = `http://127.0.0.1:${port}`;
+const oidcJwks = createRemoteJWKSet(new URL(`${internalBase}/auth/.well-known/jwks.json`));
 const idpCookieName = "idp_session";
 const escapeHtml = (value: string) =>
   value.replace(
     /[&<>"']/g,
     (character) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        character
-      ]!
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!
   );
 const appPage = (title: string, content: string) => `<!doctype html>
 <html lang="en">
@@ -185,6 +193,10 @@ const hostedUi: IdentityProviderUi = {
 const idp = createIdentityProvider({
   issuer: `${base}/auth`,
   storage,
+  oidc: {
+    signingKey: oidcSigningKey,
+    keyId: process.env["OIDC_KEY_ID"] ?? "demo-key-1",
+  },
   cookie: { ...cookieOptions, name: idpCookieName },
   ui: hostedUi,
   clients: [
@@ -193,7 +205,7 @@ const idp = createIdentityProvider({
       name: "Demo app",
       clientType: "public",
       redirectUris: [`${base}/callback`],
-      allowedScopes: ["profile"],
+      allowedScopes: ["openid", "profile", "email"],
     },
   ],
   authenticateUser: async (credentials) => {
@@ -212,12 +224,16 @@ const pending = db.collection<{
   _id: string;
   browserHash: string;
   verifier: string;
+  nonce: string;
   expiresAt: Date;
 }>("demo_oauth_requests");
 // This client needs its access token to call the API. Treat this collection as credential storage.
-const sessions = db.collection<{ _id: string; accessToken: string; expiresAt: Date }>(
-  "demo_client_sessions"
-);
+const sessions = db.collection<{
+  _id: string;
+  accessToken: string;
+  subject: string;
+  expiresAt: Date;
+}>("demo_client_sessions");
 const loginAttempts = db.collection<{ _id: string; count: number; expiresAt: Date }>(
   "demo_login_attempts"
 );
@@ -275,7 +291,8 @@ app.post(
   express.urlencoded({ extended: false, limit: "16kb" }),
   (req, res, next) => {
     void (async () => {
-      const loginEmail = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+      const loginEmail =
+        typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
       const bucket = Math.floor(Date.now() / loginWindowMs);
       const source = req.ip ?? req.socket.remoteAddress ?? "unknown";
       const attempt = await loginAttempts.findOneAndUpdate(
@@ -350,13 +367,13 @@ app.get("/app.css", (_req, res) => {
 app.get("/", (_req, res) => {
   res.type("html").send(
     appPage(
-      "OAuth end-user flow",
+      "OIDC end-user flow",
       `<section class="card">
-        <p class="eyebrow">Runnable OAuth example</p>
-        <h1>See an authorization flow end to end.</h1>
-        <p class="lede">Demo app will send you to Zero Auth Identity to sign in as <strong>user@example.com</strong>, review the requested access, and return here without exposing your password to the client.</p>
+        <p class="eyebrow">Runnable OpenID Connect example</p>
+        <h1>See a sign-in flow end to end.</h1>
+        <p class="lede">Demo app will send you to Zero Auth Identity to sign in as <strong>user@example.com</strong>, review the requested access, and return here after verifying the signed identity response.</p>
         <div class="actions"><a class="button" href="/demo/start">Continue to identity provider</a><a class="button secondary" href="/demo/profile">View authorized profile</a></div>
-        <ol class="steps"><li>Demo app creates state, a browser binding, and a PKCE challenge.</li><li>The identity provider authenticates you and asks for consent.</li><li>Demo app validates the callback and calls the protected API.</li></ol>
+        <ol class="steps"><li>Demo app creates state, nonce, a browser binding, and a PKCE challenge.</li><li>The identity provider authenticates you and asks for consent.</li><li>Demo app verifies the ID token through JWKS, then calls UserInfo and the protected API.</li></ol>
         <details><summary>Existing session controls</summary><div class="actions"><form action="/demo/revoke" method="post"><button class="secondary" type="submit">Revoke app access</button></form><form action="/demo/logout" method="post"><button class="secondary" type="submit">End identity session</button></form></div></details>
       </section>`
     )
@@ -368,10 +385,12 @@ app.get(
     const state = random();
     const verifier = random();
     const browser = random();
+    const nonce = random();
     await pending.insertOne({
       _id: hash(state),
       browserHash: hash(browser),
       verifier,
+      nonce,
       expiresAt: new Date(Date.now() + 600_000),
     });
     res.cookie("demo_flow", browser, { ...cookieOptions, maxAge: 600_000 });
@@ -380,8 +399,9 @@ app.get(
       response_type: "code",
       client_id: "demo-app",
       redirect_uri: `${base}/callback`,
-      scope: "profile",
+      scope: "openid profile email",
       state,
+      nonce,
       code_challenge: createHash("sha256").update(verifier).digest("base64url"),
       code_challenge_method: "S256",
     }).toString();
@@ -463,10 +483,15 @@ app.get(
         code_verifier: flow.verifier,
       }),
     });
-    const token = (await response.json()) as { access_token?: string; expires_in?: number };
+    const token = (await response.json()) as {
+      access_token?: string;
+      expires_in?: number;
+      id_token?: string;
+    };
     if (
       !response.ok ||
       typeof token.access_token !== "string" ||
+      typeof token.id_token !== "string" ||
       !Number.isFinite(token.expires_in) ||
       token.expires_in! <= 0
     ) {
@@ -482,10 +507,37 @@ app.get(
       );
       return;
     }
+    let subject: string;
+    try {
+      const { payload } = await jwtVerify(token.id_token, oidcJwks, {
+        issuer: `${base}/auth`,
+        audience: "demo-app",
+        algorithms: ["RS256"],
+        typ: "JWT",
+        requiredClaims: ["sub", "iat", "exp", "nonce"],
+      });
+      if (typeof payload.sub !== "string" || payload.nonce !== flow.nonce) {
+        throw new Error("Invalid OIDC subject or nonce");
+      }
+      subject = payload.sub;
+    } catch {
+      sendStatusPage(
+        res,
+        502,
+        "Identity verification failed",
+        "Demo app",
+        "We could not verify the identity response.",
+        "Start again to create a fresh OpenID Connect request.",
+        "/demo/start",
+        "Try again"
+      );
+      return;
+    }
     const session = random();
     await sessions.insertOne({
       _id: hash(session),
       accessToken: token.access_token,
+      subject,
       expiresAt: new Date(Date.now() + token.expires_in! * 1000),
     });
     res.cookie("demo_session", session, { ...cookieOptions, maxAge: token.expires_in! * 1000 });
@@ -512,31 +564,50 @@ app.get(
       );
       return;
     }
-    const response = await fetch(`${internalBase}/api/profile`, {
-      headers: { Authorization: `Bearer ${session.accessToken}` },
-      redirect: "error",
-      signal: AbortSignal.timeout(5000),
-    });
-    const profile = (await response.json()) as { userId?: string; scopes?: string[] };
-    if (!response.ok || typeof profile.userId !== "string" || !Array.isArray(profile.scopes)) {
+    const [response, userInfoResponse] = await Promise.all([
+      fetch(`${internalBase}/api/profile`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+        redirect: "error",
+        signal: AbortSignal.timeout(5000),
+      }),
+      fetch(`${internalBase}/auth/userinfo`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+        redirect: "error",
+        signal: AbortSignal.timeout(5000),
+      }),
+    ]);
+    const [profile, identity] = await Promise.all([
+      response.json() as Promise<{ userId?: string; scopes?: string[] }>,
+      userInfoResponse.json() as Promise<{ sub?: string; email?: string }>,
+    ]);
+    if (
+      !response.ok ||
+      !userInfoResponse.ok ||
+      typeof profile.userId !== "string" ||
+      !Array.isArray(profile.scopes) ||
+      typeof identity.sub !== "string" ||
+      identity.sub !== session.subject
+    ) {
       sendStatusPage(
         res,
         502,
         "Profile unavailable",
         "Demo app",
-        "The protected API rejected this session.",
+        "The identity provider or protected API rejected this session.",
         "Authorize again to obtain fresh access.",
         "/demo/start",
         "Authorize again"
       );
       return;
     }
-    res.type("html").send(
-      appPage(
-        "Authorized profile",
-        `<section class="card"><p class="eyebrow">Authorization complete</p><h1>Demo app can read your profile.</h1><p class="lede">The access token stayed on the server. This page contains only the protected resource response.</p><dl class="result"><dt>User</dt><dd>${escapeHtml(profile.userId)}</dd><dt>Granted scopes</dt><dd>${profile.scopes.map(escapeHtml).join(", ")}</dd></dl><div class="actions"><a class="button secondary" href="/">Return home</a><form action="/demo/revoke" method="post"><button type="submit">Revoke app access</button></form><form action="/demo/logout" method="post"><button class="secondary" type="submit">End identity session</button></form></div></section>`
-      )
-    );
+    res
+      .type("html")
+      .send(
+        appPage(
+          "Verified identity",
+          `<section class="card"><p class="eyebrow">OpenID Connect complete</p><h1>Demo app verified your identity.</h1><p class="lede">The signed ID token was verified through the provider's JWKS. Tokens stayed on the server; this page contains only verified claims and the protected resource response.</p><dl class="result"><dt>OIDC subject</dt><dd>${escapeHtml(identity.sub)}</dd><dt>Email from UserInfo</dt><dd>${escapeHtml(identity.email ?? "Not provided")}</dd><dt>Protected API user</dt><dd>${escapeHtml(profile.userId)}</dd><dt>Granted scopes</dt><dd>${profile.scopes.map(escapeHtml).join(", ")}</dd></dl><div class="actions"><a class="button secondary" href="/">Return home</a><form action="/demo/revoke" method="post"><button type="submit">Revoke app access</button></form><form action="/demo/logout" method="post"><button class="secondary" type="submit">End identity session</button></form></div></section>`
+        )
+      );
   })
 );
 app.post(
@@ -622,7 +693,7 @@ app.use((_error: unknown, req: Request, res: express.Response, next: express.Nex
     "Return home"
   );
 });
-const server = app.listen(port, "0.0.0.0", () => console.log(`OAuth example ready at ${base}`));
+const server = app.listen(port, "0.0.0.0", () => console.log(`OIDC example ready at ${base}`));
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.once(signal, () => {
     server.close(() => {

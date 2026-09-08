@@ -11,6 +11,8 @@ services:
       MONGODB_URI: mongodb://mongodb:27017
       MONGODB_DATABASE: zero_auth_idp_example
       DEMO_PASSWORD: ${DEMO_PASSWORD:?Set DEMO_PASSWORD to at least 12 characters}
+      OIDC_PRIVATE_KEY_BASE64: ${OIDC_PRIVATE_KEY_BASE64:?Set OIDC_PRIVATE_KEY_BASE64 to a base64-encoded PKCS8 RSA key}
+      OIDC_KEY_ID: ${OIDC_KEY_ID:-demo-key-1}
     depends_on:
       mongodb:
         condition: service_healthy

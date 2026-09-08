@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:net";
@@ -10,6 +10,10 @@ import { MongoClient } from "mongodb";
 const uri = process.env.MONGODB_URI ?? "mongodb://127.0.0.1:27017";
 const database = `zero_auth_example_test_${randomUUID().replaceAll("-", "")}`;
 const password = randomUUID();
+const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+const oidcPrivateKeyBase64 = Buffer.from(
+  privateKey.export({ type: "pkcs8", format: "pem" })
+).toString("base64");
 const mongo = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
 const listener = createServer();
 listener.listen(0, "127.0.0.1");
@@ -31,6 +35,8 @@ async function start() {
       MONGODB_URI: uri,
       MONGODB_DATABASE: database,
       DEMO_PASSWORD: password,
+      OIDC_PRIVATE_KEY_BASE64: oidcPrivateKeyBase64,
+      OIDC_KEY_ID: "e2e-key",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -47,7 +53,7 @@ async function start() {
       reject(new Error("Example exited before startup"));
     });
     child.stdout.on("data", (chunk) => {
-      if (chunk.toString().includes("OAuth example ready")) {
+      if (chunk.toString().includes("OIDC example ready")) {
         clearTimeout(timer);
         resolve();
       }
@@ -107,6 +113,9 @@ function fields(html) {
 async function consentForm() {
   const start = await http("/demo/start");
   assert.equal(start.status, 302);
+  const request = new URL(start.location);
+  assert.equal(request.searchParams.get("scope"), "openid profile email");
+  assert.ok(request.searchParams.get("nonce"));
   const authorization = await http(start.location);
   assert.equal(authorization.status, 302);
   const page = await http(authorization.location);
@@ -125,6 +134,19 @@ try {
   assert.match(home.contentSecurityPolicy, /style-src 'self'/);
   assert.match((await http("/app.css")).contentType, /^text\/css/);
   assert.equal((await http("/auth/.well-known/oauth-authorization-server")).status, 200);
+  const discovery = await http("/auth/.well-known/openid-configuration");
+  assert.equal(discovery.status, 200);
+  assert.deepEqual(JSON.parse(discovery.text), {
+    ...JSON.parse((await http("/auth/.well-known/oauth-authorization-server")).text),
+    userinfo_endpoint: `${base}/auth/userinfo`,
+    jwks_uri: `${base}/auth/.well-known/jwks.json`,
+    subject_types_supported: ["public"],
+    id_token_signing_alg_values_supported: ["RS256"],
+    claims_supported: ["sub", "email", "name"],
+  });
+  const jwks = await http("/auth/.well-known/jwks.json");
+  assert.equal(jwks.status, 200);
+  assert.equal(JSON.parse(jwks.text).keys[0].kid, "e2e-key");
   assert.equal((await http("/api/profile")).status, 401);
   for (const path of [
     "/auth/login",
@@ -223,8 +245,11 @@ try {
   const profile = await http(callback.location);
   assert.equal(profile.status, 200);
   assert.match(profile.contentType, /^text\/html/);
-  assert.match(profile.text, /Demo app can read your profile/);
+  assert.match(profile.text, /Demo app verified your identity/);
+  assert.match(profile.text, /OIDC subject/);
+  assert.match(profile.text, /user@example\.com/);
   assert.match(profile.text, /demo-user/);
+  assert.match(profile.text, />openid, profile, email</);
   assert.match(profile.text, />profile</);
   assert.equal((await http(allowed.location)).status, 400, "Callback is single-use");
   assert.equal((await http("/api/session")).status, 200);
@@ -232,6 +257,11 @@ try {
   // Restart again: both client access and browser session remain usable.
   await stop();
   await start();
+  assert.deepEqual(
+    JSON.parse((await http("/auth/.well-known/jwks.json")).text),
+    JSON.parse(jwks.text),
+    "OIDC signing key survives process restarts"
+  );
   assert.equal((await http("/demo/profile")).status, 200);
   assert.equal((await http("/api/session")).status, 200);
   const storedUser = await mongo
@@ -270,7 +300,7 @@ try {
   assert.equal(deniedCallback.status, 400);
   assert.match(deniedCallback.text, /No access was granted/);
   console.log(
-    "PASS: deployable UI, login throttling, PKCE callback, state/browser binding, two process restarts, revocation, logout, denial, hashed user"
+    "PASS: deployable OIDC UI, stable JWKS, ID-token verification, UserInfo, PKCE callback, two process restarts, revocation, logout, denial"
   );
 } finally {
   await stop();

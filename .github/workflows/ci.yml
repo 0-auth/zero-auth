@@ -126,8 +126,9 @@ jobs:
         env:
           DEMO_PASSWORD: ci-only-standalone-password
         run: |
+          export OIDC_PRIVATE_KEY_BASE64="$(node -e 'const {generateKeyPairSync}=require("node:crypto");const {privateKey}=generateKeyPairSync("rsa",{modulusLength:2048});process.stdout.write(Buffer.from(privateKey.export({type:"pkcs8",format:"pem"})).toString("base64"))')"
           trap 'docker compose -p zero-auth-idp-ci -f examples/express-idp/docker-compose.yml down -v' EXIT
           docker compose -p zero-auth-idp-ci -f examples/express-idp/docker-compose.yml up --build -d --wait
-          node --input-type=module -e "const [health, metadata, home, protectedApi] = await Promise.all(['/health', '/auth/.well-known/oauth-authorization-server', '/', '/api/profile'].map(path => fetch('http://127.0.0.1:3001' + path))); if (!health.ok || !metadata.ok || !home.ok || protectedApi.status !== 401 || !(await home.text()).includes('Continue to identity provider')) throw new Error('Standalone image smoke test failed')"
+          node --input-type=module -e "const [health, metadata, discovery, jwks, home, protectedApi] = await Promise.all(['/health', '/auth/.well-known/oauth-authorization-server', '/auth/.well-known/openid-configuration', '/auth/.well-known/jwks.json', '/', '/api/profile'].map(path => fetch('http://127.0.0.1:3001' + path))); if (!health.ok || !metadata.ok || !discovery.ok || !jwks.ok || !home.ok || protectedApi.status !== 401 || !(await home.text()).includes('Continue to identity provider')) throw new Error('Standalone image smoke test failed')"
           docker compose -p zero-auth-idp-ci -f examples/express-idp/docker-compose.yml stop mongodb
           node --input-type=module -e "const health = await fetch('http://127.0.0.1:3001/health', { signal: AbortSignal.timeout(10000) }); if (health.status !== 503) throw new Error('Readiness did not report the MongoDB outage')"
