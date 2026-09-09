@@ -1,8 +1,15 @@
-import { createHash, createPrivateKey, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createPrivateKey,
+  randomBytes,
+  randomUUID,
+  scrypt,
+  timingSafeEqual,
+} from "node:crypto";
 import { promisify } from "node:util";
 import express, { type Request, type RequestHandler } from "express";
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import { MongoClient } from "mongodb";
+import { MongoClient, MongoServerError } from "mongodb";
 import { createIdentityProvider, type IdentityProviderUi } from "@0-auth/zero-auth-idp";
 import { createMongoOAuthStorage } from "@0-auth/zero-auth-idp-mongodb";
 
@@ -41,26 +48,30 @@ await storage.ensureIndexes();
 const users = db.collection<{ _id: string; email: string; salt: string; passwordHash: string }>(
   "demo_users"
 );
+await users.createIndex({ email: 1 }, { unique: true });
 const deriveKey = promisify(scrypt);
-const email = "user@example.com";
-if (!(await users.findOne({ _id: "demo-user" }))) {
+async function passwordFields(value: string) {
   const salt = randomBytes(16).toString("hex");
-  const key = (await deriveKey(password, salt, 64)) as Buffer;
-  await users.updateOne(
-    { _id: "demo-user" },
-    {
-      $setOnInsert: {
-        email,
-        salt,
-        passwordHash: key.toString("hex"),
-      },
-    },
-    { upsert: true }
-  );
+  const key = (await deriveKey(value, salt, 64)) as Buffer;
+  return { salt, passwordHash: key.toString("hex") };
+}
+const isDuplicateEmail = (error: unknown) =>
+  error instanceof MongoServerError && error.code === 11000;
+const email = "user@example.com";
+if (!(await users.findOne({ email }))) {
+  try {
+    await users.insertOne({ _id: "demo-user", email, ...(await passwordFields(password)) });
+  } catch (error) {
+    if (!isDuplicateEmail(error)) throw error;
+  }
 }
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const random = () => randomBytes(32).toString("base64url");
+const normalizeEmail = (value: string) => value.trim().toLowerCase();
+// ponytail: shape validation only; verified delivery becomes authoritative with email verification.
+const isValidEmail = (value: string) =>
+  value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 const internalBase = `http://127.0.0.1:${port}`;
 const oidcJwks = createRemoteJWKSet(new URL(`${internalBase}/auth/.well-known/jwks.json`));
 const idpCookieName = "idp_session";
@@ -135,6 +146,24 @@ function cookie(req: Request, name: string): string {
       ?.slice(name.length + 1) ?? ""
   );
 }
+function sendRegistrationForm(
+  response: express.Response,
+  email = "",
+  error?: string,
+  status = 200
+) {
+  const csrfToken = random();
+  response.cookie("register_csrf", csrfToken, { ...cookieOptions, maxAge: 600_000 });
+  response
+    .status(status)
+    .type("html")
+    .send(
+      appPage(
+        "Create account",
+        `<section class="card"><p class="eyebrow">Zero Auth Identity</p><h1>Create your account.</h1><p class="lede">Register an email and password, then continue through the OpenID Connect sign-in flow.</p>${error ? `<p role="alert">${escapeHtml(error)}</p>` : ""}<form class="registration" method="post" action="/register"><input type="hidden" name="csrf_token" value="${escapeHtml(csrfToken)}"><label>Email<input type="email" name="email" value="${escapeHtml(email)}" autocomplete="email" maxlength="254" required></label><label>Password<input type="password" name="password" autocomplete="new-password" minlength="12" maxlength="1024" required></label><label>Confirm password<input type="password" name="confirm_password" autocomplete="new-password" minlength="12" maxlength="1024" required></label><button type="submit">Create account</button></form><p><a href="/">Return home</a></p></section>`
+      )
+    );
+}
 function hasAllowedMutationOrigin(req: Request): boolean {
   if (process.env["NODE_ENV"] === "development") return true;
   const requestOrigin = req.get("origin");
@@ -165,7 +194,7 @@ const hostedUi: IdentityProviderUi = {
       <form method="post" action="${escapeHtml(context.action)}">
         <input type="hidden" name="transaction" value="${escapeHtml(context.transactionId)}">
         <input type="hidden" name="csrf_token" value="${escapeHtml(context.csrfToken)}">
-        <p><label>Email<br><input type="email" name="email" autocomplete="email" required></label></p>
+        <p><label>Email<br><input type="email" name="email" value="${escapeHtml(context.email ?? "")}" autocomplete="email" required></label></p>
         <p><label>Password<br><input type="password" name="password" autocomplete="current-password" required></label></p>
         <button type="submit">Continue</button>
       </form>`
@@ -209,12 +238,13 @@ const idp = createIdentityProvider({
     },
   ],
   authenticateUser: async (credentials) => {
-    if (credentials.email.length > 254 || credentials.password.length > 1024) return null;
-    const user = await users.findOne({ _id: "demo-user" });
+    const loginEmail = normalizeEmail(credentials.email);
+    if (!isValidEmail(loginEmail) || credentials.password.length > 1024) return null;
+    const user = await users.findOne({ email: loginEmail });
     if (!user) return null;
     const key = (await deriveKey(credentials.password, user.salt, 64)) as Buffer;
-    return timingSafeEqual(key, Buffer.from(user.passwordHash, "hex")) &&
-      credentials.email === user.email
+    const storedKey = Buffer.from(user.passwordHash, "hex");
+    return storedKey.length === key.length && timingSafeEqual(key, storedKey)
       ? { id: user._id, email: user.email }
       : null;
   },
@@ -234,14 +264,31 @@ const sessions = db.collection<{
   subject: string;
   expiresAt: Date;
 }>("demo_client_sessions");
-const loginAttempts = db.collection<{ _id: string; count: number; expiresAt: Date }>(
-  "demo_login_attempts"
+const attempts = db.collection<{ _id: string; count: number; expiresAt: Date }>(
+  "demo_request_limits"
 );
 await Promise.all([
   pending.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
-  loginAttempts.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+  attempts.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
 ]);
+// ponytail: fixed windows can allow a boundary burst; use a rolling limiter if that becomes material.
+const attemptWindowMs = 10 * 60_000;
+async function consumeAttempt(kind: string, source: string, subject: string, limit: number) {
+  const bucket = Math.floor(Date.now() / attemptWindowMs);
+  const attempt = await attempts.findOneAndUpdate(
+    { _id: hash(`${kind}\0${source}\0${subject}\0${bucket}`) },
+    {
+      $inc: { count: 1 },
+      $setOnInsert: { expiresAt: new Date((bucket + 2) * attemptWindowMs) },
+    },
+    { upsert: true, returnDocument: "after" }
+  );
+  return {
+    limited: (attempt?.count ?? 0) > limit,
+    retryAfter: Math.max(1, Math.ceil(((bucket + 1) * attemptWindowMs - Date.now()) / 1000)),
+  };
+}
 
 const app = express();
 app.disable("x-powered-by");
@@ -261,13 +308,18 @@ const route =
   (req, res, next) => {
     void handler(req, res).catch(next);
   };
-// Browser mutations require an explicit matching Origin, including hosted login/consent/logout.
+// Browser mutations require an explicit matching Origin, including registration and hosted forms.
 app.use((req, res, next) => {
   if (
     req.method === "POST" &&
-    ["/auth/login", "/auth/consent", "/auth/logout", "/demo/revoke", "/demo/logout"].includes(
-      req.path.toLowerCase().replace(/\/+$/, "")
-    ) &&
+    [
+      "/register",
+      "/auth/login",
+      "/auth/consent",
+      "/auth/logout",
+      "/demo/revoke",
+      "/demo/logout",
+    ].includes(req.path.toLowerCase().replace(/\/+$/, "")) &&
     !hasAllowedMutationOrigin(req)
   ) {
     sendStatusPage(
@@ -284,30 +336,16 @@ app.use((req, res, next) => {
   }
   next();
 });
-// ponytail: fixed windows can allow a boundary burst; use a rolling limiter if that becomes material.
-const loginWindowMs = 10 * 60_000;
 app.post(
   "/auth/login",
   express.urlencoded({ extended: false, limit: "16kb" }),
   (req, res, next) => {
     void (async () => {
-      const loginEmail =
-        typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
-      const bucket = Math.floor(Date.now() / loginWindowMs);
+      const loginEmail = typeof req.body?.email === "string" ? normalizeEmail(req.body.email) : "";
       const source = req.ip ?? req.socket.remoteAddress ?? "unknown";
-      const attempt = await loginAttempts.findOneAndUpdate(
-        { _id: hash(`${source}\0${loginEmail}\0${bucket}`) },
-        {
-          $inc: { count: 1 },
-          $setOnInsert: { expiresAt: new Date((bucket + 2) * loginWindowMs) },
-        },
-        { upsert: true, returnDocument: "after" }
-      );
-      if (attempt && attempt.count > 10) {
-        res.set(
-          "Retry-After",
-          String(Math.ceil(((bucket + 1) * loginWindowMs - Date.now()) / 1000))
-        );
+      const result = await consumeAttempt("login", source, loginEmail, 10);
+      if (result.limited) {
+        res.set("Retry-After", String(result.retryAfter));
         sendStatusPage(
           res,
           429,
@@ -357,12 +395,106 @@ app.get("/app.css", (_req, res) => {
     .result { margin-top: 2rem; padding: 1.25rem; border-radius: 1rem; background: #e7efe4; }
     .result dt { color: #57705d; font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
     .result dd { margin: .25rem 0 1rem; font-size: 1.1rem; }
+    .registration { display: grid; gap: 1rem; margin-top: 2rem; }
+    .registration label { display: grid; gap: .4rem; font-weight: 700; }
+    .registration input { width: 100%; border: 1px solid #aebaac; border-radius: .7rem; padding: .75rem; color: inherit; background: white; font: inherit; }
+    .registration button { justify-self: start; }
     form { display: inline; }
     details { margin-top: 2rem; color: #4c5c51; }
     summary { cursor: pointer; font-weight: 700; }
     a:focus-visible, button:focus-visible { outline: 3px solid #e17440; outline-offset: 3px; }
     @media (max-width: 34rem) { .card { margin-top: 2rem; } .actions > * { width: 100%; } .actions form button { width: 100%; } }
   `);
+});
+app.get("/register", (_req, res) => sendRegistrationForm(res));
+app.post(
+  "/register",
+  express.urlencoded({ extended: false, limit: "16kb" }),
+  route(async (req, res) => {
+    const submittedCsrf = typeof req.body?.csrf_token === "string" ? req.body.csrf_token : "";
+    const expectedCsrf = cookie(req, "register_csrf");
+    if (
+      !submittedCsrf ||
+      !expectedCsrf ||
+      !timingSafeEqual(
+        Buffer.from(hash(submittedCsrf), "hex"),
+        Buffer.from(hash(expectedCsrf), "hex")
+      )
+    ) {
+      sendStatusPage(
+        res,
+        400,
+        "Registration expired",
+        "Zero Auth Identity",
+        "This registration cannot continue.",
+        "Open a fresh registration form and try again.",
+        "/register",
+        "Start again"
+      );
+      return;
+    }
+    res.clearCookie("register_csrf", cookieOptions);
+    const registrationEmail =
+      typeof req.body?.email === "string" ? normalizeEmail(req.body.email) : "";
+    const registrationPassword = typeof req.body?.password === "string" ? req.body.password : "";
+    const confirmation =
+      typeof req.body?.confirm_password === "string" ? req.body.confirm_password : "";
+    const source = req.ip ?? req.socket.remoteAddress ?? "unknown";
+    const result = await consumeAttempt("register", source, registrationEmail, 5);
+    if (result.limited) {
+      res.set("Retry-After", String(result.retryAfter));
+      sendStatusPage(
+        res,
+        429,
+        "Try again later",
+        "Zero Auth Identity",
+        "Too many registration attempts",
+        "Wait a few minutes, then open a fresh registration form.",
+        "/register",
+        "Return to registration"
+      );
+      return;
+    }
+    if (!isValidEmail(registrationEmail)) {
+      sendRegistrationForm(res, registrationEmail, "Enter a valid email address.", 400);
+      return;
+    }
+    if (registrationPassword.length < 12 || registrationPassword.length > 1024) {
+      sendRegistrationForm(
+        res,
+        registrationEmail,
+        "Use a password between 12 and 1024 characters.",
+        400
+      );
+      return;
+    }
+    if (registrationPassword !== confirmation) {
+      sendRegistrationForm(res, registrationEmail, "The passwords do not match.", 400);
+      return;
+    }
+    try {
+      await users.insertOne({
+        _id: randomUUID(),
+        email: registrationEmail,
+        ...(await passwordFields(registrationPassword)),
+      });
+    } catch (error) {
+      if (!isDuplicateEmail(error)) throw error;
+    }
+    res.redirect(303, "/register/complete");
+  })
+);
+app.get("/register/complete", (_req, res) => {
+  sendStatusPage(
+    res,
+    200,
+    "Account ready",
+    "Zero Auth Identity",
+    "Continue to sign in.",
+    "If the email was already registered, its existing password was kept.",
+    "/demo/start",
+    "Continue to identity provider"
+  );
 });
 app.get("/", (_req, res) => {
   res.type("html").send(
@@ -371,8 +503,8 @@ app.get("/", (_req, res) => {
       `<section class="card">
         <p class="eyebrow">Runnable OpenID Connect example</p>
         <h1>See a sign-in flow end to end.</h1>
-        <p class="lede">Demo app will send you to Zero Auth Identity to sign in as <strong>user@example.com</strong>, review the requested access, and return here after verifying the signed identity response.</p>
-        <div class="actions"><a class="button" href="/demo/start">Continue to identity provider</a><a class="button secondary" href="/demo/profile">View authorized profile</a></div>
+        <p class="lede">Create an account or use <strong>user@example.com</strong>, then Demo app will send you to Zero Auth Identity and return after verifying the signed identity response.</p>
+        <div class="actions"><a class="button" href="/demo/start">Continue to identity provider</a><a class="button secondary" href="/register">Create account</a><a class="button secondary" href="/demo/profile">View authorized profile</a></div>
         <ol class="steps"><li>Demo app creates state, nonce, a browser binding, and a PKCE challenge.</li><li>The identity provider authenticates you and asks for consent.</li><li>Demo app verifies the ID token through JWKS, then calls UserInfo and the protected API.</li></ol>
         <details><summary>Existing session controls</summary><div class="actions"><form action="/demo/revoke" method="post"><button class="secondary" type="submit">Revoke app access</button></form><form action="/demo/logout" method="post"><button class="secondary" type="submit">End identity session</button></form></div></details>
       </section>`

@@ -10,6 +10,9 @@ import { MongoClient } from "mongodb";
 const uri = process.env.MONGODB_URI ?? "mongodb://127.0.0.1:27017";
 const database = `zero_auth_example_test_${randomUUID().replaceAll("-", "")}`;
 const password = randomUUID();
+const registeredEmail = `new-${randomUUID()}@example.com`;
+const registeredPassword = `registered-${randomUUID()}`;
+const duplicatePassword = `duplicate-${randomUUID()}`;
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const oidcPrivateKeyBase64 = Buffer.from(
   privateKey.export({ type: "pkcs8", format: "pem" })
@@ -101,13 +104,14 @@ async function http(
     text: await response.text(),
   };
 }
+function hiddenField(html, name) {
+  const match = new RegExp(`name="${name}" value="([^"]+)"`).exec(html);
+  assert.ok(match, `Form contains ${name}`);
+  return match[1];
+}
 function fields(html) {
   return Object.fromEntries(
-    ["transaction", "csrf_token"].map((name) => {
-      const match = new RegExp(`name="${name}" value="([^"]+)"`).exec(html);
-      assert.ok(match, `Hosted form contains ${name}`);
-      return [name, match[1]];
-    })
+    ["transaction", "csrf_token"].map((name) => [name, hiddenField(html, name)])
   );
 }
 async function consentForm() {
@@ -131,6 +135,7 @@ try {
   const home = await http("/");
   assert.equal(home.status, 200);
   assert.match(home.text, /Continue to identity provider/);
+  assert.match(home.text, /Create account/);
   assert.match(home.contentSecurityPolicy, /style-src 'self'/);
   assert.match((await http("/app.css")).contentType, /^text\/css/);
   assert.equal((await http("/auth/.well-known/oauth-authorization-server")).status, 200);
@@ -148,7 +153,56 @@ try {
   assert.equal(jwks.status, 200);
   assert.equal(JSON.parse(jwks.text).keys[0].kid, "e2e-key");
   assert.equal((await http("/api/profile")).status, 401);
+  let registration = await http("/register");
+  assert.equal(registration.status, 200);
+  assert.match(registration.text, /Create your account/);
+  const invalidRegistrationCsrf = await http("/register", {
+    method: "POST",
+    form: {
+      csrf_token: "wrong",
+      email: registeredEmail,
+      password: registeredPassword,
+      confirm_password: registeredPassword,
+    },
+  });
+  assert.equal(invalidRegistrationCsrf.status, 400);
+  registration = await http("/register");
+  const mismatch = await http("/register", {
+    method: "POST",
+    form: {
+      csrf_token: hiddenField(registration.text, "csrf_token"),
+      email: registeredEmail,
+      password: registeredPassword,
+      confirm_password: duplicatePassword,
+    },
+  });
+  assert.equal(mismatch.status, 400);
+  assert.match(mismatch.text, /passwords do not match/);
+  const registered = await http("/register", {
+    method: "POST",
+    form: {
+      csrf_token: hiddenField(mismatch.text, "csrf_token"),
+      email: ` ${registeredEmail.toUpperCase()} `,
+      password: registeredPassword,
+      confirm_password: registeredPassword,
+    },
+  });
+  assert.equal(registered.status, 303);
+  assert.equal(registered.location, "/register/complete");
+  assert.match((await http(registered.location)).text, /Continue to sign in/);
+  registration = await http("/register");
+  const duplicate = await http("/register", {
+    method: "POST",
+    form: {
+      csrf_token: hiddenField(registration.text, "csrf_token"),
+      email: registeredEmail,
+      password: duplicatePassword,
+      confirm_password: duplicatePassword,
+    },
+  });
+  assert.equal(duplicate.status, 303, "Duplicate registration uses the generic completion flow");
   for (const path of [
+    "/register",
     "/auth/login",
     "/auth/consent",
     "/auth/logout",
@@ -210,19 +264,19 @@ try {
   let form = fields(page.text);
   const invalidCsrf = await http("/auth/login", {
     method: "POST",
-    form: { ...form, csrf_token: "wrong", email: "user@example.com", password },
+    form: { ...form, csrf_token: "wrong", email: registeredEmail, password: registeredPassword },
   });
   assert.equal(invalidCsrf.status, 400);
   const failedLogin = await http("/auth/login", {
     method: "POST",
-    form: { ...form, email: "user@example.com", password: "incorrect-password" },
+    form: { ...form, email: registeredEmail, password: duplicatePassword },
   });
   assert.equal(failedLogin.status, 200);
   assert.ok(failedLogin.text.includes("incorrect"));
   form = fields(failedLogin.text);
   const login = await http("/auth/login", {
     method: "POST",
-    form: { ...form, email: "user@example.com", password },
+    form: { ...form, email: registeredEmail.toUpperCase(), password: registeredPassword },
   });
   assert.equal(login.status, 302);
   page = await http(login.location);
@@ -247,8 +301,7 @@ try {
   assert.match(profile.contentType, /^text\/html/);
   assert.match(profile.text, /Demo app verified your identity/);
   assert.match(profile.text, /OIDC subject/);
-  assert.match(profile.text, /user@example\.com/);
-  assert.match(profile.text, /demo-user/);
+  assert.match(profile.text, new RegExp(registeredEmail));
   assert.match(profile.text, />openid, profile, email</);
   assert.equal((await http(allowed.location)).status, 400, "Callback is single-use");
   assert.equal((await http("/api/session")).status, 200);
@@ -269,6 +322,16 @@ try {
     .findOne({ _id: "demo-user" });
   assert.equal(typeof storedUser?.passwordHash, "string");
   assert.ok(storedUser.passwordHash !== password && !("password" in storedUser));
+  const registeredUser = await mongo
+    .db(database)
+    .collection("demo_users")
+    .findOne({ email: registeredEmail });
+  assert.equal(typeof registeredUser?.passwordHash, "string");
+  assert.ok(registeredUser.passwordHash !== registeredPassword && !("password" in registeredUser));
+  assert.equal(
+    await mongo.db(database).collection("demo_users").countDocuments({ email: registeredEmail }),
+    1
+  );
   assert.equal(
     (await http("/demo/revoke", { method: "POST", origin: "https://attacker.example" })).status,
     403
@@ -288,7 +351,7 @@ try {
   page = await consentForm();
   const secondLogin = await http("/auth/login", {
     method: "POST",
-    form: { ...fields(page.text), email: "user@example.com", password },
+    form: { ...fields(page.text), email: registeredEmail, password: registeredPassword },
   });
   page = await http(secondLogin.location);
   const denied = await http("/auth/consent", {
@@ -299,7 +362,7 @@ try {
   assert.equal(deniedCallback.status, 400);
   assert.match(deniedCallback.text, /No access was granted/);
   console.log(
-    "PASS: deployable OIDC UI, stable JWKS, ID-token verification, UserInfo, PKCE callback, two process restarts, revocation, logout, denial"
+    "PASS: registration, unique normalized email, OIDC verification, UserInfo, PKCE callback, restarts, revocation, logout, denial"
   );
 } finally {
   await stop();

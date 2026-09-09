@@ -3,7 +3,8 @@
 > [!NOTE]
 > The example requires MongoDB, `DEMO_PASSWORD` (at least 12 characters), and a
 > base64-encoded PKCS8 RSA private key. It is a deployable OpenID Connect
-> demonstration with one seeded user, not a production identity directory.
+> demonstration with one seeded user and self-registration, not a production
+> identity directory.
 
 One Express backend demonstrates three roles: an authorization server with hosted
 login/consent, an OIDC client, and a protected resource API. MongoDB persists each
@@ -33,7 +34,8 @@ both values. Never commit that file or the private key.
 Open [http://localhost:3001](http://localhost:3001), click **Continue to identity
 provider**, sign in as `user@example.com` with your configured password, and
 approve consent. Demo app then renders the protected profile response without
-displaying the access or ID token.
+displaying the access or ID token. You can also choose **Create account** first
+and use that email for the same flow.
 
 MongoDB is accessible only on the Compose network; it does not take over your
 existing host port 27017. The app is exposed on localhost port 3001. Its MongoDB
@@ -79,6 +81,17 @@ Seeding is idempotent. The password is stored as a salted scrypt hash in the
 application's `demo_users` collection. Changing `DEMO_PASSWORD` after the first
 run does not overwrite an existing password. The IdP adapter never manages users.
 
+## Register a user
+
+Open `/register`, enter an email and a password of at least 12 characters, then
+continue to the identity provider. Registration normalizes email addresses,
+enforces a unique MongoDB index, hashes passwords with scrypt, and protects the
+form with same-origin and CSRF checks. Re-registering an email uses the same
+generic completion page and never replaces its password.
+
+The registration flow does not verify email ownership or recover forgotten
+passwords. Add both before enabling public signups.
+
 ## What happens during authorization
 
 1. `GET /demo/start` generates random state, nonce, a PKCE verifier, and a
@@ -105,10 +118,11 @@ restrict database access accordingly. The ID token is verified and discarded.
 The IdP's own collections contain token hashes. Tokens, passwords, codes, signing
 keys, and callback URLs are not logged or rendered by the example.
 
-Login submissions are limited to ten attempts per source and normalized email in
-each ten-minute window. The counters live in MongoDB, so the limit is shared by
-multiple application replicas. Set `TRUST_PROXY=1` only when the application is
-behind exactly one trusted proxy that replaces forwarded client-address headers.
+Login submissions are limited to ten attempts and registration submissions to
+five attempts per source and normalized email in each ten-minute window. The
+counters live in MongoDB, so the limit is shared by multiple application replicas.
+Set `TRUST_PROXY=1` only when the application is behind exactly one trusted proxy
+that replaces forwarded client-address headers.
 
 ## Verify persistence
 
@@ -139,12 +153,13 @@ npm test
 ```
 
 The test compiles the application, creates a unique disposable database, and
-starts the built JavaScript on an unused port. It checks the browser pages, login
-throttling, wrong credentials, CSRF, OIDC discovery, stable JWKS, ID-token
-verification, UserInfo subject binding, state/nonce handling, callback replay,
-denial, revocation, logout, password hashing, and two actual process restarts. It
-drops only its test database and stops its own processes afterward. No tokens or
-private keys appear in its output.
+starts the built JavaScript on an unused port. It checks registration, unique
+normalized emails, password preservation, login throttling, wrong credentials,
+CSRF, OIDC discovery, stable JWKS, ID-token verification, UserInfo subject
+binding, state/nonce handling, callback replay, denial, revocation, logout,
+password hashing, and two actual process restarts. It drops only its test database
+and stops its own processes afterward. No tokens or private keys appear in its
+output.
 
 The adapter also verifies actual MongoDB TTL deletion. That test waits up to
 90 seconds for MongoDB's background cleanup pass:
@@ -206,6 +221,6 @@ container rather than routing back through the public hostname.
 
 Compose is intentionally a localhost development setup with an isolated MongoDB
 network and persistent volume. Public deployment also needs HTTPS, database
-authentication and TLS, and an account/password recovery policy. Use an HTTPS
-`PUBLIC_ORIGIN` with `NODE_ENV=production`; cookies become Secure. Registration,
-refresh tokens, password reset, and administration are outside this example.
+authentication and TLS, verified email delivery, and password recovery. Use an
+HTTPS `PUBLIC_ORIGIN` with `NODE_ENV=production`; cookies become Secure. Refresh
+tokens and administration are outside this example.
