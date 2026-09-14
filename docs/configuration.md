@@ -76,11 +76,15 @@ into the configured header. See [CSRF protection](/guides/cookies#csrf-protectio
 | Option | Default | Purpose |
 | --- | --- | --- |
 | `rotate` | `false` | Issue a new refresh token on every refresh. |
+| `resolveUser` | — | Reload current claims; return `null` to reject the account. |
 | `refreshStore` | — | Atomic store wired to rotation automatically. |
 | `consumeRefreshToken` | — | Atomically mark the old `jti` as used. Required for safe rotation. |
 | `registerRefreshToken` | — | Track the replacement `jti` for family revocation. |
 | `onRefreshReuse` | — | Revoke the token family after a replay is detected. |
 | `isRevoked` / `revokeRefreshToken` | — | Legacy compatibility hooks; warn and are not concurrency-safe. |
+
+The claims returned by `resolveUser(claims, context)` replace the older application
+claims while preserving the verified user and token-family identities.
 
 Use a shared store for multiple instances. The [refresh rotation guide](/guides/refresh-rotation)
 shows the expected lifecycle, the public `RefreshTokenStore` contract, and the
