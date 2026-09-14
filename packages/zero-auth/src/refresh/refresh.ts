@@ -36,7 +36,7 @@ export function createRefreshHandler(engine: JwtEngine, config: ResolvedConfig):
     engine
       .verifyRefreshToken(token)
       .then(async (decoded) => {
-        const payload = withFamilyId(toRefreshPayload(decoded), config.refreshOptions.rotate);
+        let payload = withFamilyId(toRefreshPayload(decoded), config.refreshOptions.rotate);
 
         const familyId =
           typeof payload["fid"] === "string" ? (payload["fid"] as string) : undefined;
@@ -98,6 +98,29 @@ export function createRefreshHandler(engine: JwtEngine, config: ResolvedConfig):
             next(new AuthError("AUTH_TOKEN_INVALID", "Failed revocation check."));
             return;
           }
+        }
+
+        if (typeof config.refreshOptions.resolveUser === "function") {
+          let resolvedUser: JwtPayload | null;
+          try {
+            resolvedUser = await Promise.resolve(
+              config.refreshOptions.resolveUser(payload, tokenCtx)
+            );
+          } catch (resolveErr) {
+            logger.warn("refreshHandler: resolveUser hook threw an error", resolveErr);
+            next(new AuthError("AUTH_TOKEN_INVALID", "Failed to resolve user during refresh."));
+            return;
+          }
+          if (!resolvedUser) {
+            next(new AuthError("AUTH_UNAUTHORIZED"));
+            return;
+          }
+          if (resolvedUser.id !== tokenCtx.userId) {
+            next(new AuthError("AUTH_TOKEN_INVALID", "Resolved user id does not match token."));
+            return;
+          }
+          payload = toRefreshPayload(resolvedUser);
+          if (familyId !== undefined) payload["fid"] = familyId;
         }
 
         // ponytail: legacy split check/revoke is race-prone; migrate to consumeRefreshToken.

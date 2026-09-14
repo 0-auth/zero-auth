@@ -33,6 +33,14 @@ export interface AuthConfig {
      */
     rotate?: boolean;
     /**
+     * Reloads current application-owned user claims before a refresh succeeds.
+     * Return `null` to reject deleted, disabled, or otherwise ineligible users.
+     */
+    resolveUser?: (
+      claims: JwtPayload,
+      ctx: RefreshTokenContext
+    ) => Promise<JwtPayload | null> | JwtPayload | null;
+    /**
      * Atomically consume the old refresh token before issuing replacements.
      * Return `true` only when this call marks the `jti` for the first time;
      * return `false` when it was already consumed. Use an atomic store
@@ -138,6 +146,10 @@ export interface ResolvedConfig {
   };
   refreshOptions: {
     rotate: boolean;
+    resolveUser?: (
+      claims: JwtPayload,
+      ctx: RefreshTokenContext
+    ) => Promise<JwtPayload | null> | JwtPayload | null;
     consumeRefreshToken?: (oldJti: string, ctx?: RefreshTokenContext) => Promise<boolean> | boolean;
     revokeRefreshToken?: (oldJti: string, ctx?: RefreshTokenContext) => Promise<void> | void;
     registerRefreshToken?: (newJti: string, ctx: RefreshTokenContext) => Promise<void> | void;

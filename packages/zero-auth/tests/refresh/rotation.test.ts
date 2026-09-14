@@ -193,6 +193,57 @@ describe("Refresh rotation", () => {
     expect(access["fid"]).toBeTypeOf("string");
   });
 
+  it("reloads current claims and rejects unavailable users", async () => {
+    const store = createInMemoryRevocationStore();
+    let currentUser: {
+      id: string;
+      email: string;
+      role: string;
+      emailVerified: boolean;
+    } | null = {
+      id: "u-current",
+      email: "current@example.com",
+      role: "member",
+      emailVerified: true,
+    };
+    const auth = createAuth({
+      accessSecret: "current-access-secret-min-32-chars-xxx",
+      refreshSecret: "current-refresh-secret-min-32-chars-xx",
+      refreshStore: store,
+      refreshOptions: {
+        rotate: true,
+        resolveUser: () => currentUser,
+      },
+    });
+    const app = express();
+    app.use(express.json());
+    app.post("/auth/refresh", auth.refreshHandler());
+    app.use(auth.errorHandler);
+
+    const initial = await auth.generateTokenPair({
+      id: currentUser.id,
+      role: "admin",
+      obsoletePermission: true,
+    });
+    const familyId = decodeToken(initial.refreshToken)["fid"];
+    const refreshed = await request(app)
+      .post("/auth/refresh")
+      .send({ refreshToken: initial.refreshToken });
+
+    expect(refreshed.status).toBe(200);
+    const access = decodeToken(refreshed.body.accessToken);
+    expect(access).toMatchObject(currentUser);
+    expect(access).not.toHaveProperty("obsoletePermission");
+    expect(decodeToken(refreshed.body.refreshToken)["fid"]).toBe(familyId);
+
+    currentUser = null;
+    const rejected = await request(app)
+      .post("/auth/refresh")
+      .send({ refreshToken: refreshed.body.refreshToken });
+    expect(rejected.status).toBe(401);
+    expect(rejected.body.error.code).toBe("AUTH_UNAUTHORIZED");
+  });
+
   it("prefers refresh cookie over access Bearer header", async () => {
     const auth = createAuth({
       accessSecret: "bearer-access-secret-min-32-chars-xxxx",

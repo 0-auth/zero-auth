@@ -99,6 +99,7 @@ function resolveRefreshOptions(config: AuthConfig): ResolvedConfig["refreshOptio
 
   return {
     rotate: options?.rotate ?? false,
+    ...(options?.resolveUser ? { resolveUser: options.resolveUser } : {}),
     ...(options?.consumeRefreshToken
       ? { consumeRefreshToken: options.consumeRefreshToken }
       : typeof store?.consume === "function"
@@ -293,19 +294,23 @@ function validateSecrets(config: AuthConfig): void {
 
 /** Rotation without an atomic consume operation is unsafe under concurrency. */
 function validateRefreshOptions(config: AuthConfig): void {
-  if (!config.refreshOptions?.rotate) return;
+  const options = config.refreshOptions;
+  if (options?.resolveUser !== undefined && typeof options.resolveUser !== "function") {
+    throw new Error("[zero-auth] `refreshOptions.resolveUser` must be a function.");
+  }
+  if (!options?.rotate) return;
 
   const isProd = process.env["NODE_ENV"] === "production";
   if (
-    typeof config.refreshOptions.consumeRefreshToken === "function" ||
+    typeof options.consumeRefreshToken === "function" ||
     typeof config.refreshStore?.consume === "function"
   ) {
     return;
   }
 
   const missing: string[] = [];
-  if (typeof config.refreshOptions.isRevoked !== "function") missing.push("isRevoked");
-  if (typeof config.refreshOptions.revokeRefreshToken !== "function") {
+  if (typeof options.isRevoked !== "function") missing.push("isRevoked");
+  if (typeof options.revokeRefreshToken !== "function") {
     missing.push("revokeRefreshToken");
   }
 

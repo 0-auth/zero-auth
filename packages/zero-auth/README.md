@@ -424,6 +424,27 @@ app.get("/articles/:slug", auth.optional(), (req, res) => {
 app.post("/auth/refresh", auth.refreshHandler());
 ```
 
+Use `refreshOptions.resolveUser` when refreshes must reflect current account
+state instead of claims stored in an older token. Return `null` to reject a
+deleted, disabled, or unverified user:
+
+```ts
+const auth = createAuth({
+  accessSecret: process.env.JWT_ACCESS_SECRET!,
+  refreshSecret: process.env.JWT_REFRESH_SECRET!,
+  refreshOptions: {
+    resolveUser: async ({ id }) => {
+      const user = await users.findById(id);
+      if (!user?.active || !user.emailVerified) return null;
+      return { id: user.id, email: user.email, role: user.role };
+    },
+  },
+});
+```
+
+The returned claims replace the old application claims. The user id and refresh
+token family remain bound to the verified refresh token.
+
 **How the refresh token is extracted:**
 1. Refresh token cookie (`cookies.refreshTokenName`)
 2. JSON body field (`refreshToken` or `refresh_token`)

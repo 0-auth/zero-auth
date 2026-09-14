@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.0 - 2026-09-15
+
+### Added
+
+- Add `refreshOptions.resolveUser` to reload current claims or reject an account
+  before issuing refreshed tokens.
+
 ## 1.4.1 - 2026-09-05
 
 ### Security
