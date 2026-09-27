@@ -1,7 +1,14 @@
 import { signToken } from "./sign.js";
 import { verifyToken } from "./verify.js";
 import { decodeToken } from "./decode.js";
-import type { JwtPayload, AuthUser, TokenPair, ResolvedConfig } from "../types/auth.js";
+import { createKeyResolver, createJwksResolver } from "./keys.js";
+import type {
+  JwtPayload,
+  AuthUser,
+  TokenPair,
+  ResolvedConfig,
+  SupportedAlgorithm,
+} from "../types/auth.js";
 
 /**
  * Core JWT engine bound to a resolved config.
@@ -49,29 +56,103 @@ export interface JwtEngine {
  * Creates a JWT engine bound to the given resolved config.
  */
 export function createJwtEngine(config: ResolvedConfig): JwtEngine {
+  const jwksResolver =
+    config.isJwks && config.jwksUri ? createJwksResolver(config.jwksUri, config.jwks) : undefined;
+
+  const accessSigningInput = config.privateKey ?? config.accessSecret;
+  const accessVerificationInput = config.publicKey ?? config.accessSecret;
+
+  const getAccessSigningKey = createKeyResolver(
+    accessSigningInput,
+    config.algorithm,
+    "sign",
+    "[zero-auth] Cannot issue access tokens in verifier-only mode: `privateKey` is missing."
+  );
+
+  const getAccessVerificationKey = createKeyResolver(
+    accessVerificationInput,
+    config.algorithm,
+    "verify",
+    "[zero-auth] Verification key is missing."
+  );
+
+  const refreshAlgorithm: SupportedAlgorithm = config.refreshSecret ? "HS256" : config.algorithm;
+
+  const refreshSigningInput =
+    config.refreshPrivateKey ??
+    (config.refreshSecret !== undefined ? config.refreshSecret : config.privateKey);
+
+  const refreshVerificationInput =
+    config.refreshPublicKey ??
+    (config.refreshSecret !== undefined ? config.refreshSecret : config.publicKey);
+
+  const getRefreshSigningKey = createKeyResolver(
+    refreshSigningInput,
+    refreshAlgorithm,
+    "sign",
+    "[zero-auth] Cannot issue refresh tokens in verifier-only mode: `privateKey` or `refreshPrivateKey` is missing."
+  );
+
+  const getRefreshVerificationKey = createKeyResolver(
+    refreshVerificationInput,
+    refreshAlgorithm,
+    "verify",
+    "[zero-auth] Refresh token verification key is missing."
+  );
+
   return {
-    generateAccessToken(payload: JwtPayload): Promise<string> {
-      return signToken(payload, config.accessSecret, config.accessExpiresIn, config.jwt);
+    async generateAccessToken(payload: JwtPayload): Promise<string> {
+      const key = await getAccessSigningKey();
+      return signToken(payload, key, config.accessExpiresIn, {
+        ...config.jwt,
+        algorithm: config.algorithm,
+        ...(config.keyId !== undefined && { keyId: config.keyId }),
+      });
     },
 
-    generateRefreshToken(payload: JwtPayload): Promise<string> {
-      return signToken(payload, config.refreshSecret, config.refreshExpiresIn, config.jwt);
+    async generateRefreshToken(payload: JwtPayload): Promise<string> {
+      const key = await getRefreshSigningKey();
+      return signToken(payload, key, config.refreshExpiresIn, {
+        ...config.jwt,
+        algorithm: refreshAlgorithm,
+        ...(config.keyId !== undefined && { keyId: config.keyId }),
+      });
     },
 
     async generateTokenPair(payload: JwtPayload): Promise<TokenPair> {
       const [accessToken, refreshToken] = await Promise.all([
-        signToken(payload, config.accessSecret, config.accessExpiresIn, config.jwt),
-        signToken(payload, config.refreshSecret, config.refreshExpiresIn, config.jwt),
+        this.generateAccessToken(payload),
+        this.generateRefreshToken(payload),
       ]);
       return { accessToken, refreshToken };
     },
 
-    verifyAccessToken(token: string): Promise<AuthUser> {
-      return verifyToken(token, config.accessSecret, config.jwt);
+    async verifyAccessToken(token: string): Promise<AuthUser> {
+      if (jwksResolver) {
+        return verifyToken(token, jwksResolver, {
+          ...config.jwt,
+          ...(config.algorithm ? { algorithm: config.algorithm } : {}),
+        });
+      }
+      const key = await getAccessVerificationKey();
+      return verifyToken(token, key, {
+        ...config.jwt,
+        algorithm: config.algorithm,
+      });
     },
 
-    verifyRefreshToken(token: string): Promise<AuthUser> {
-      return verifyToken(token, config.refreshSecret, config.jwt);
+    async verifyRefreshToken(token: string): Promise<AuthUser> {
+      if (jwksResolver && !config.refreshPublicKey && !config.refreshSecret) {
+        return verifyToken(token, jwksResolver, {
+          ...config.jwt,
+          ...(config.algorithm ? { algorithm: config.algorithm } : {}),
+        });
+      }
+      const key = await getRefreshVerificationKey();
+      return verifyToken(token, key, {
+        ...config.jwt,
+        algorithm: refreshAlgorithm,
+      });
     },
 
     decodeToken(token: string): AuthUser {

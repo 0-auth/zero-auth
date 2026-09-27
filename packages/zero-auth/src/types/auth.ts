@@ -1,4 +1,25 @@
+import type { KeyLike } from "jose";
 import type { CookieOptions } from "./cookies.js";
+
+// ─── Supported Algorithms & Keys ─────────────────────────────────────────────
+
+export type SymmetricAlgorithm = "HS256" | "HS384" | "HS512";
+export type AsymmetricAlgorithm =
+  | "RS256"
+  | "RS384"
+  | "RS512"
+  | "PS256"
+  | "PS384"
+  | "PS512"
+  | "ES256"
+  | "ES384"
+  | "ES512"
+  | "EdDSA";
+
+export type SupportedAlgorithm = SymmetricAlgorithm | AsymmetricAlgorithm;
+
+/** Accepted key types for signing or verification. */
+export type KeyInput = string | Uint8Array | KeyLike | object;
 
 // ─── Auth Configuration ─────────────────────────────────────────────────────
 
@@ -6,10 +27,60 @@ import type { CookieOptions } from "./cookies.js";
  * Configuration passed to `createAuth()`.
  */
 export interface AuthConfig {
-  /** Secret used to sign access tokens (HS256). Min 32 chars recommended. */
-  accessSecret: string;
-  /** Secret used to sign refresh tokens (HS256). Min 32 chars recommended. */
-  refreshSecret: string;
+  /**
+   * Secret used to sign access tokens (HS256/symmetric). Min 32 chars recommended.
+   * Required when using symmetric algorithms unless asymmetric keys are provided.
+   */
+  accessSecret?: string;
+  /**
+   * Secret used to sign refresh tokens (HS256/symmetric). Min 32 chars recommended.
+   * Required when using symmetric algorithms unless asymmetric keys are provided.
+   */
+  refreshSecret?: string;
+  /**
+   * JWT signing and verification algorithm.
+   * Supports symmetric (HS256, HS384, HS512) and asymmetric (RS256, ES256, EdDSA, etc.).
+   * @default "HS256"
+   */
+  algorithm?: SupportedAlgorithm;
+  /**
+   * Private key for signing access tokens (and refresh tokens if not overridden).
+   * Accepts PKCS#8 PEM string, CryptoKey, or KeyLike.
+   */
+  privateKey?: KeyInput;
+  /**
+   * Public key for verifying access tokens (and refresh tokens if not overridden).
+   * Accepts SPKI PEM string, CryptoKey, or KeyLike.
+   */
+  publicKey?: KeyInput;
+  /**
+   * Optional dedicated private key for signing refresh tokens.
+   */
+  refreshPrivateKey?: KeyInput;
+  /**
+   * Optional dedicated public key for verifying refresh tokens.
+   */
+  refreshPublicKey?: KeyInput;
+  /**
+   * Optional Key ID (`kid`) added to the protected header of signed JWTs.
+   */
+  keyId?: string;
+  /**
+   * Symmetric secret for signing double-submit CSRF tokens when JWTs use asymmetric keys.
+   * Defaults to `accessSecret` if provided; otherwise required when CSRF is enabled with cookies.
+   */
+  csrfSecret?: string;
+  /**
+   * Remote JSON Web Key Set (JWKS) URL.
+   * When provided, verification keys are fetched dynamically from this URL with caching and cooldown.
+   * Sets verifier-only mode (token signing is disabled).
+   * @example "https://auth.example.com/.well-known/jwks.json"
+   */
+  jwksUri?: string | URL;
+  /**
+   * Optional configuration for remote JWKS fetching, caching, and timeouts.
+   */
+  jwks?: RemoteJwksConfig;
   /** Optional JWT claim validation policy shared by access and refresh tokens. */
   jwt?: JwtValidationConfig;
   /** Expiry for access tokens. Accepts zeit/ms strings like "15m", "1h". @default "15m" */
@@ -69,6 +140,18 @@ export interface AuthConfig {
   };
 }
 
+/** Configuration options for remote JWKS key fetching and caching. */
+export interface RemoteJwksConfig {
+  /** Maximum age of cached keys in milliseconds. @default 600000 (10 minutes) */
+  cacheMaxAge?: number;
+  /** Cooldown duration in milliseconds after an unmatched key before refetching. @default 30000 (30 seconds) */
+  cooldownDuration?: number;
+  /** Timeout in milliseconds for fetching the remote JWKS. @default 5000 (5 seconds) */
+  timeoutDuration?: number;
+  /** Optional custom HTTP headers sent with the JWKS request. */
+  headers?: Record<string, string>;
+}
+
 /** Optional issuer, audience, and clock-skew policy for JWTs. */
 export interface JwtValidationConfig {
   /** Expected `iss` claim. Added to new tokens and checked during verification. */
@@ -125,6 +208,8 @@ export interface CsrfConfig {
   headerName?: string;
   /** HTTP methods to protect. @default ["POST", "PUT", "PATCH", "DELETE"] */
   methods?: string[];
+  /** Optional symmetric secret for signing CSRF tokens. */
+  secret?: string;
 }
 
 // ─── Resolved Internal Config ────────────────────────────────────────────────
@@ -133,8 +218,20 @@ export interface CsrfConfig {
  * Fully resolved config after defaults are applied. Used internally.
  */
 export interface ResolvedConfig {
-  accessSecret: string;
-  refreshSecret: string;
+  algorithm: SupportedAlgorithm;
+  isAsymmetric: boolean;
+  isVerifierOnly: boolean;
+  isJwks: boolean;
+  jwksUri?: string;
+  jwks?: RemoteJwksConfig;
+  accessSecret?: string;
+  refreshSecret?: string;
+  privateKey?: KeyInput;
+  publicKey?: KeyInput;
+  refreshPrivateKey?: KeyInput;
+  refreshPublicKey?: KeyInput;
+  keyId?: string;
+  csrfSecret?: string;
   jwt: JwtValidationConfig;
   accessExpiresIn: string;
   refreshExpiresIn: string;
@@ -143,6 +240,7 @@ export interface ResolvedConfig {
     cookieName: string;
     headerName: string;
     methods: string[];
+    secret?: string;
   };
   refreshOptions: {
     rotate: boolean;

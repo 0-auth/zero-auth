@@ -8,8 +8,15 @@ const MAX_TOKEN_LENGTH = 256;
 
 /** Creates a signed, client-readable double-submit CSRF token cookie. */
 export function createCsrfToken(res: Response, config: ResolvedConfig): string {
+  const secret = config.csrf.secret ?? config.accessSecret;
+  if (!secret) {
+    throw new Error(
+      "[zero-auth] CSRF protection requires a symmetric secret. Provide `csrfSecret` or `accessSecret` in AuthConfig."
+    );
+  }
+
   const nonce = randomBytes(32).toString("base64url");
-  const token = `${nonce}.${sign(nonce, config.accessSecret)}`;
+  const token = `${nonce}.${sign(nonce, secret)}`;
   const options = config.cookies.options;
 
   res.cookie(config.csrf.cookieName, token, {
@@ -28,6 +35,13 @@ export function createCsrfToken(res: Response, config: ResolvedConfig): string {
  * Safe methods and requests without auth cookies pass through unchanged.
  */
 export function createCsrfMiddleware(config: ResolvedConfig): RequestHandler {
+  const secret = config.csrf.secret ?? config.accessSecret;
+  if (!secret) {
+    throw new Error(
+      "[zero-auth] CSRF protection requires a symmetric secret. Provide `csrfSecret` or `accessSecret` in AuthConfig."
+    );
+  }
+
   const protectedMethods = new Set(config.csrf.methods);
 
   return function csrf(req: Request, _res: Response, next: NextFunction): void {
@@ -48,11 +62,7 @@ export function createCsrfMiddleware(config: ResolvedConfig): RequestHandler {
     const cookieToken = getCookie(req, config.csrf.cookieName);
     const headerToken = req.get(config.csrf.headerName);
 
-    if (
-      !cookieToken ||
-      !headerToken ||
-      !isValidToken(cookieToken, headerToken, config.accessSecret)
-    ) {
+    if (!cookieToken || !headerToken || !isValidToken(cookieToken, headerToken, secret)) {
       next(new AuthError("AUTH_CSRF_INVALID"));
       return;
     }

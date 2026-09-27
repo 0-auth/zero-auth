@@ -34,6 +34,7 @@ export default defineConfig({
             { text: "Overview", link: "/" },
             { text: "Quick start", link: "/quick-start" },
             { text: "Runnable REST example", link: "/examples/rest-api" },
+            { text: "Runnable JWKS microservices", link: "/examples/jwks-microservices" },
           ],
         },
         {
@@ -43,6 +44,7 @@ export default defineConfig({
             { text: "HTTP-only cookies", link: "/guides/cookies" },
             { text: "RBAC and optional auth", link: "/guides/access-control" },
             { text: "Refresh token rotation", link: "/guides/refresh-rotation" },
+            { text: "Asymmetric keys and JWKS", link: "/guides/asymmetric-and-jwks" },
             { text: "Architecture and request flows", link: "/architecture" },
           ],
         },

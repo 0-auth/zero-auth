@@ -49,6 +49,8 @@ HTTP-only cookies, and RBAC with middleware your team can understand.
   - [3. Route Protection & RBAC](#3-route-protection--rbac)
   - [4. Optional Authentication](#4-optional-authentication)
   - [5. Token Refresh & Rotation](#5-token-refresh--rotation)
+  - [6. Asymmetric Keys & Microservices (RS256 / ES256 / EdDSA)](#6-asymmetric-keys--microservices-rs256--es256--eddsa)
+  - [7. Remote JWKS Verification & JWKS Publisher](#7-remote-jwks-verification--jwks-publisher)
 - [Error Handling & Error Codes](#error-handling--error-codes)
 - [TypeScript Support](#typescript-support)
 - [API Reference](#api-reference)
@@ -63,10 +65,14 @@ HTTP-only cookies, and RBAC with middleware your team can understand.
 
 ## Features
 
+- **Asymmetric & Symmetric Crypto**: Sign and verify with modern asymmetric keys (`ES256`, `RS256`, `EdDSA`, `PS256`) or standard HMAC (`HS256`, `HS384`, `HS512`).
+- **Remote JWKS & Dynamic Verification**: Verify tokens against remote JWKS endpoints (`/.well-known/jwks.json`, Clerk, Auth0, Firebase, AWS Cognito) with automated caching, cooldown, and key rotation.
+- **JWKS Publisher**: Serve your public keys dynamically with `auth.jwksHandler()` or export JWKS with `auth.getJwks()`.
+- **Verifier-Only Mode**: Zero-signing verification mode for downstream microservices and API gateways.
 - **JWT Validation Policy**: Optionally enforce token issuer, audience, clock tolerance, and `nbf` validation.
 - **Pluggable Refresh Stores**: Connect atomic refresh-token consumption and family revocation to Redis or another store.
 - ⚡ **Zero-Boilerplate Setup**: Initialize with `createAuth()` and start securing routes immediately.
-- 🔒 **Secure by Default**: Cryptographically signed tokens (HS256 via [jose](https://github.com/panva/jose)), enforced minimum 32-character secret length.
+- 🔒 **Secure by Default**: Cryptographically signed tokens via [jose](https://github.com/panva/jose), strict algorithm restriction, and enforced secret length.
 - 🍪 **Built-in Cookie Support**: Seamless HTTP-only cookie handling without extra cookie middleware dependencies.
 - 🛡️ **Cookie CSRF Protection**: Signed double-submit middleware for state-changing cookie requests.
 - 🔄 **Automatic Token Refresh & Rotation**: Built-in refresh route handler with optional token family reuse detection.
@@ -189,13 +195,14 @@ app.listen(3000, () => console.log("Server running on http://localhost:3000"));
 
 ## Examples
 
-Two complete, runnable example projects are included in the
+Three complete, runnable example projects are included in the
 [`examples/`](https://github.com/0-auth/zero-auth/tree/master/examples) directory:
 
 | Example | Description | Features |
 | ------- | ----------- | -------- |
 | [`express-rest-api`](https://github.com/0-auth/zero-auth/tree/master/examples/express-rest-api) | Stateless Bearer token API for mobile / CLI / SPA clients | `generateTokenPair`, `protect`, `authorize`, `optional`, `refreshHandler`, `decodeToken` |
 | [`express-cookies-redis`](https://github.com/0-auth/zero-auth/tree/master/examples/express-cookies-redis) | Cookie-based auth with Redis-backed refresh token rotation | `sendAuthTokens`, `clearAuth`, CSRF, rotation hooks, family revocation, `onRefreshReuse` |
+| [`express-jwks-microservices`](https://github.com/0-auth/zero-auth/tree/master/examples/express-jwks-microservices) | Central Auth (RS256) + Downstream Microservices via Remote JWKS | `jwksUri`, `jwksHandler`, `getJwks`, Verifier-Only mode, dynamic key rotation |
 
 Each example includes a README with setup instructions and cURL commands for every endpoint.
 
@@ -219,9 +226,24 @@ Pass your settings to `createAuth(config)`:
 
 ```ts
 const auth = createAuth({
-  // Required
+  // Option A: Symmetric HMAC (default)
   accessSecret: process.env.JWT_ACCESS_SECRET!,   // String (min 32 chars)
   refreshSecret: process.env.JWT_REFRESH_SECRET!, // String (min 32 chars, distinct from accessSecret)
+
+  // Option B: Asymmetric (RS256, ES256, EdDSA, PS256)
+  // algorithm: "ES256",
+  // privateKey: process.env.JWT_PRIVATE_KEY, // PKCS#8 PEM string or CryptoKey
+  // publicKey: process.env.JWT_PUBLIC_KEY,   // SPKI PEM string or CryptoKey (required)
+  // keyId: "auth-key-v1",                    // Optional 'kid' header in JWTs
+  // csrfSecret: process.env.CSRF_SECRET,     // Required if using cookie CSRF with asymmetric keys
+  //
+  // Or Remote JWKS Verification (Verifier-Only Mode):
+  // jwksUri: "https://auth.example.com/.well-known/jwks.json",
+  // jwks: {
+  //   cacheMaxAge: 600_000,       // 10 minutes cache
+  //   cooldownDuration: 30_000,   // 30 seconds cooldown between rate-limited refetches
+  //   timeoutDuration: 5_000,     // 5 seconds fetch timeout
+  // },
 
   // Optional JWT validation policy
   jwt: {
@@ -502,6 +524,103 @@ new usable refresh token behind.
 
 ---
 
+### 6. Asymmetric Keys & Microservices (RS256 / ES256 / EdDSA)
+
+In distributed architectures, sharing symmetric secrets across multiple services is a security risk. With asymmetric cryptography:
+- The **Auth Service** holds the **private key** to sign tokens.
+- **Downstream Microservices & Gateways** hold only the **public key** to verify incoming tokens without needing the private signing key.
+
+#### Supported Asymmetric Algorithms:
+- **ECDSA**: `ES256` (recommended for modern web APIs), `ES384`, `ES512`
+- **RSA**: `RS256`, `RS384`, `RS512`, `PS256`, `PS384`, `PS512`
+- **Edwards Curve**: `EdDSA` (Ed25519)
+
+#### Central Auth Service (Issuing & Verifying)
+```ts
+const auth = createAuth({
+  algorithm: "ES256",
+  privateKey: process.env.JWT_PRIVATE_KEY!, // PKCS#8 PEM string or CryptoKey
+  publicKey: process.env.JWT_PUBLIC_KEY!,   // SPKI PEM string or CryptoKey
+  keyId: "auth-key-2026-v1",                // Sets 'kid' in protected header
+});
+
+const tokens = await auth.generateTokenPair({ id: "user_123", role: "admin" });
+```
+
+#### Downstream Service (Verifier-Only Mode)
+```ts
+const auth = createAuth({
+  algorithm: "ES256",
+  publicKey: process.env.JWT_PUBLIC_KEY!, // Only public key needed!
+  jwt: {
+    issuer: "https://auth.example.com",
+    audience: "api.example.com",
+  },
+});
+
+// Protect routes without the ability to forge or sign tokens:
+app.get("/api/reports", auth.protect(), auth.authorize(["admin"]), (req, res) => {
+  res.json({ message: "Secure data", user: req.user });
+});
+```
+
+### 7. Remote JWKS Verification & JWKS Publisher
+
+#### Downstream Consumer: Dynamic Remote JWKS Verification
+
+Downstream APIs and microservices can dynamically verify tokens issued by central auth servers or third-party Identity Providers (Clerk, Auth0, Firebase, Google, AWS Cognito) using their public `/.well-known/jwks.json` endpoint.
+
+Keys are cached in-memory and refetched automatically when a new key ID (`kid`) is encountered, ensuring zero downtime during key rotation.
+
+```ts
+import { createAuth } from "@0-auth/zero-auth";
+
+const auth = createAuth({
+  jwksUri: "https://auth.example.com/.well-known/jwks.json",
+  jwt: {
+    issuer: "https://auth.example.com",
+    audience: "api.example.com",
+  },
+  jwks: {
+    cacheMaxAge: 600_000,     // 10 min cache
+    cooldownDuration: 30_000, // 30 sec cooldown between fetches
+    timeoutDuration: 5_000,   // 5 sec network timeout
+  },
+});
+
+// Use protect() middleware as usual:
+app.get("/api/orders", auth.protect(), (req, res) => {
+  res.json({ orders: [], userId: req.user.id });
+});
+```
+
+#### Central Auth Service: Serving a JWKS Endpoint (Publisher)
+
+If your central service signs tokens with asymmetric keys (`RS256`, `ES256`, `EdDSA`), you can publish the public keys via a standard JWKS route using `auth.jwksHandler()`:
+
+```ts
+import express from "express";
+import { createAuth } from "@0-auth/zero-auth";
+
+const auth = createAuth({
+  algorithm: "RS256",
+  keyId: "auth-key-2026-v1",
+  privateKey: process.env.JWT_PRIVATE_KEY!,
+  publicKey: process.env.JWT_PUBLIC_KEY!,
+});
+
+const app = express();
+
+// Expose public JWKS endpoint for downstream microservices:
+app.get("/.well-known/jwks.json", auth.jwksHandler());
+
+// Or export JWKS programmatically:
+const jwks = await auth.getJwks();
+// { keys: [ { kty: "RSA", kid: "auth-key-2026-v1", alg: "RS256", use: "sig", n: "...", e: "AQAB" } ] }
+```
+
+---
+
 ## Error Handling & Error Codes
 
 All errors thrown by `zero-auth` are instances of `AuthError`.
@@ -614,6 +733,8 @@ Created via `const auth = createAuth(config)`:
 | `csrfToken(res)` | `string` | Sets and returns a client-readable signed CSRF token. |
 | `refreshHandler()` | `RequestHandler` | Express route handler for refreshing access tokens. |
 | `rotateTokens(payload)` | `Promise<TokenPair>` | Generates a new access + refresh pair (for custom rotation logic). |
+| `getJwks()` | `Promise<{ keys: Record<string, unknown>[] }>` | Returns public key(s) formatted as a JSON Web Key Set (JWKS). |
+| `jwksHandler()` | `RequestHandler` | Express route handler that serves the JSON Web Key Set at `/.well-known/jwks.json`. |
 | `errorHandler` | `ErrorRequestHandler` | Express error middleware for handling `AuthError` responses. |
 
 ---
@@ -662,6 +783,8 @@ import {
 | `parseCookieHeader(cookieHeader)` | Zero-dependency cookie string parser. |
 | `createInMemoryRevocationStore()` | In-memory token revocation helper for development and tests. |
 | `createRedisRevocationStore(redis, ttlSeconds?)` | ioredis-compatible store for atomic rotation and family revocation. |
+| `createJwksResolver(jwksUri, options?)` | Creates a remote JWKS resolver function for low-level `verifyToken`. |
+| `exportPublicKeyToJwk(publicKey, options?)` | Converts SPKI PEM or KeyLike public key to a standard JWK object. |
 
 ---
 

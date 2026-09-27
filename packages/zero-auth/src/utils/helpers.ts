@@ -7,8 +7,15 @@ import type {
   RefreshTokenStore,
   RefreshReuseContext,
   RefreshTokenContext,
+  SupportedAlgorithm,
 } from "../types/auth.js";
 import type { CookieOptions } from "../types/cookies.js";
+import {
+  isAsymmetricAlgorithm,
+  isSymmetricAlgorithm,
+  SYMMETRIC_ALGORITHMS,
+  ASYMMETRIC_ALGORITHMS,
+} from "../core/keys.js";
 
 // ─── Default Values ───────────────────────────────────────────────────────────
 
@@ -47,7 +54,7 @@ const REGISTERED_JWT_CLAIMS = new Set([
  * fully-resolved internal config.
  */
 export function resolveConfig(config: AuthConfig): ResolvedConfig {
-  validateSecrets(config);
+  const { algorithm, isAsymmetric, isVerifierOnly, isJwks, jwksUri } = validateKeyConfig(config);
   const jwt = resolveJwtConfig(config.jwt);
   validateRefreshStore(config.refreshStore);
   validateRefreshOptions(config);
@@ -57,8 +64,20 @@ export function resolveConfig(config: AuthConfig): ResolvedConfig {
   const csrf = resolveCsrfConfig(config, accessTokenName, refreshTokenName);
 
   return {
-    accessSecret: config.accessSecret,
-    refreshSecret: config.refreshSecret,
+    algorithm,
+    isAsymmetric,
+    isVerifierOnly,
+    isJwks,
+    ...(jwksUri !== undefined && { jwksUri }),
+    ...(config.jwks !== undefined && { jwks: config.jwks }),
+    ...(config.accessSecret !== undefined && { accessSecret: config.accessSecret }),
+    ...(config.refreshSecret !== undefined && { refreshSecret: config.refreshSecret }),
+    ...(config.privateKey !== undefined && { privateKey: config.privateKey }),
+    ...(config.publicKey !== undefined && { publicKey: config.publicKey }),
+    ...(config.refreshPrivateKey !== undefined && { refreshPrivateKey: config.refreshPrivateKey }),
+    ...(config.refreshPublicKey !== undefined && { refreshPublicKey: config.refreshPublicKey }),
+    ...(config.keyId !== undefined && { keyId: config.keyId }),
+    ...(config.csrfSecret !== undefined && { csrfSecret: config.csrfSecret }),
     jwt,
     accessExpiresIn: config.accessExpiresIn ?? DEFAULT_ACCESS_EXPIRES_IN,
     refreshExpiresIn: config.refreshExpiresIn ?? DEFAULT_REFRESH_EXPIRES_IN,
@@ -171,6 +190,13 @@ function resolveCsrfConfig(
   const cookieName = config.csrf?.cookieName ?? DEFAULT_CSRF_COOKIE_NAME;
   const headerName = config.csrf?.headerName ?? DEFAULT_CSRF_HEADER_NAME;
   const methods = config.csrf?.methods ?? DEFAULT_CSRF_METHODS;
+  const secret = config.csrfSecret ?? config.csrf?.secret ?? config.accessSecret;
+
+  if (config.csrf && !secret) {
+    throw new Error(
+      "[zero-auth] CSRF protection requires a symmetric secret. Provide 'csrfSecret' or 'accessSecret'."
+    );
+  }
 
   if (!cookieName.trim() || !headerName.trim()) {
     throw new Error("[zero-auth] CSRF cookieName and headerName cannot be empty.");
@@ -190,6 +216,7 @@ function resolveCsrfConfig(
     cookieName,
     headerName,
     methods: [...new Set(methods.map((method) => method.trim().toUpperCase()))],
+    ...(secret !== undefined && { secret }),
   };
 }
 
@@ -259,21 +286,109 @@ export function parseExpiryToSeconds(expiry: string): number {
   return Math.floor(value * (multipliers[unit] ?? 1));
 }
 
-// ─── Validation ───────────────────────────────────────────────────────────────
-
 /**
- * Validates that secrets are present and of sufficient length.
- * Warns in development if secrets appear weak.
+ * Validates keys and algorithms based on whether symmetric or asymmetric signing is used.
  */
-function validateSecrets(config: AuthConfig): void {
+function validateKeyConfig(config: AuthConfig): {
+  algorithm: SupportedAlgorithm;
+  isAsymmetric: boolean;
+  isVerifierOnly: boolean;
+  isJwks: boolean;
+  jwksUri?: string;
+} {
+  const isProd = process.env["NODE_ENV"] === "production";
+
+  // Check if Remote JWKS mode is configured
+  if (config.jwksUri !== undefined) {
+    const uriStr = typeof config.jwksUri === "string" ? config.jwksUri : config.jwksUri.toString();
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(uriStr);
+    } catch {
+      throw new Error(
+        `[zero-auth] 'jwksUri' must be a valid HTTP or HTTPS URL: received "${uriStr}".`
+      );
+    }
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      throw new Error(
+        `[zero-auth] 'jwksUri' must have http: or https: protocol: received "${uriStr}".`
+      );
+    }
+
+    if (config.privateKey !== undefined || config.accessSecret !== undefined) {
+      throw new Error(
+        "[zero-auth] 'jwksUri' cannot be combined with 'privateKey' or 'accessSecret'. Remote JWKS is a verifier-only mode."
+      );
+    }
+
+    if (config.publicKey !== undefined) {
+      throw new Error(
+        "[zero-auth] 'jwksUri' cannot be combined with 'publicKey'. Verification keys are fetched dynamically from the JWKS endpoint."
+      );
+    }
+
+    const algorithm: SupportedAlgorithm = config.algorithm ?? "RS256";
+
+    if (config.csrfSecret && config.csrfSecret.length < 32) {
+      const msg = "[zero-auth] `csrfSecret` should be at least 32 characters for security.";
+      if (isProd) throw new Error(msg);
+      console.warn(`WARNING: ${msg}`);
+    }
+
+    return {
+      algorithm,
+      isAsymmetric: true,
+      isVerifierOnly: true,
+      isJwks: true,
+      jwksUri: uriStr,
+    };
+  }
+
+  const algorithm: SupportedAlgorithm = config.algorithm ?? "HS256";
+  const isAsymmetric = isAsymmetricAlgorithm(algorithm);
+  const isSymmetric = isSymmetricAlgorithm(algorithm);
+
+  if (!isAsymmetric && !isSymmetric) {
+    throw new Error(
+      `[zero-auth] Unsupported algorithm: "${algorithm}". Supported algorithms: ` +
+        [...SYMMETRIC_ALGORITHMS, ...ASYMMETRIC_ALGORITHMS].join(", ")
+    );
+  }
+
+  if (isAsymmetric) {
+    const hasPublicKey = Boolean(config.publicKey);
+    const hasPrivateKey = Boolean(config.privateKey);
+
+    if (!hasPublicKey && !hasPrivateKey) {
+      throw new Error(
+        `[zero-auth] Algorithm "${algorithm}" is asymmetric and requires at least 'publicKey' (for verifier mode) or 'privateKey' + 'publicKey' (for full auth).`
+      );
+    }
+
+    if (hasPrivateKey && !hasPublicKey) {
+      throw new Error(
+        `[zero-auth] 'publicKey' is required when 'privateKey' is provided for algorithm "${algorithm}".`
+      );
+    }
+
+    const isVerifierOnly = !hasPrivateKey && hasPublicKey;
+
+    if (config.csrfSecret && config.csrfSecret.length < 32) {
+      const msg = "[zero-auth] `csrfSecret` should be at least 32 characters for security.";
+      if (isProd) throw new Error(msg);
+      console.warn(`WARNING: ${msg}`);
+    }
+
+    return { algorithm, isAsymmetric: true, isVerifierOnly, isJwks: false };
+  }
+
+  // Symmetric mode (HS256, HS384, HS512)
   if (!config.accessSecret) {
     throw new Error("[zero-auth] `accessSecret` is required.");
   }
   if (!config.refreshSecret) {
     throw new Error("[zero-auth] `refreshSecret` is required.");
   }
-
-  const isProd = process.env["NODE_ENV"] === "production";
 
   if (config.accessSecret.length < 32) {
     const msg = "[zero-auth] `accessSecret` should be at least 32 characters for security.";
@@ -290,6 +405,8 @@ function validateSecrets(config: AuthConfig): void {
     if (isProd) throw new Error(msg);
     console.warn(`WARNING: ${msg}`);
   }
+
+  return { algorithm, isAsymmetric: false, isVerifierOnly: false, isJwks: false };
 }
 
 /** Rotation without an atomic consume operation is unsafe under concurrency. */

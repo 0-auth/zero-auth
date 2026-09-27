@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.6.0 - 2026-09-28
+
+### Added
+
+- **Asymmetric Key Cryptography**:
+  - Support for asymmetric algorithms: `RS256`, `RS384`, `RS512`, `PS256`, `PS384`, `PS512`, `ES256`, `ES384`, `ES512`, and `EdDSA` (Ed25519) via PKCS#8 / SPKI PEM strings or `CryptoKey`.
+  - Configurable `keyId` to emit the `kid` header claim in signed JWTs.
+  - Dedicated Verifier-Only mode allowing downstream microservices and gateways to verify tokens using only the public key with zero signing capability.
+- **Remote JWKS Verification & Publisher**:
+  - Dynamic verification against remote JWKS endpoints (`jwksUri: string | URL`), compatible with central auth servers and third-party Identity Providers (Clerk, Auth0, Firebase, Google, AWS Cognito).
+  - Built-in in-memory caching (`cacheMaxAge`), rate-limited cooldown (`cooldownDuration`), and request timeout options (`timeoutDuration`) via `jwks: RemoteJwksConfig`.
+  - Zero-downtime key rotation: automated refetching when encountering an unobserved Key ID (`kid`).
+  - JWKS publisher route handler: `auth.jwksHandler()` serves public keys at `/.well-known/jwks.json` with automated `Content-Type` and `Cache-Control` headers.
+  - Programmatic JWKS export: `auth.getJwks()` with memoized JWK caching.
+  - Standalone utility functions: `createJwksResolver()` and `exportPublicKeyToJwk()`.
+- **New Microservices Architecture Example**:
+  - Added runnable example `examples/express-jwks-microservices` demonstrating central RS256 token issuance and JWKS publishing alongside a downstream verifier-only microservice.
+- **Documentation**:
+  - Added dedicated guide `docs/guides/asymmetric-and-jwks.md`.
+  - Added runnable example guide `docs/examples/jwks-microservices.md`.
+  - Updated configuration reference and VitePress navigation.
+
 ## 1.5.0 - 2026-09-15
 
 ### Added

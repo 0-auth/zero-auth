@@ -1,26 +1,41 @@
 import { SignJWT } from "jose";
-import type { JwtPayload, JwtValidationConfig } from "../types/auth.js";
+import type { JwtPayload, JwtValidationConfig, SupportedAlgorithm } from "../types/auth.js";
 import { parseExpiryToSeconds } from "../utils/helpers.js";
+import { importKeyInput, type ResolvedKey } from "./keys.js";
+
+export interface SignTokenOptions extends JwtValidationConfig {
+  /** JWT algorithm to use for signing. @default "HS256" */
+  algorithm?: SupportedAlgorithm;
+  /** Optional Key ID to set in the protected header (`kid`). */
+  keyId?: string;
+}
 
 /**
- * Signs a JWT using HS256 (HMAC-SHA256) with the provided secret.
+ * Signs a JWT using the specified algorithm and key.
  *
  * @param payload - Application-level claims to embed.
- * @param secret - Signing secret (UTF-8 string).
+ * @param keyOrSecret - Signing secret string, PEM string, Uint8Array, or CryptoKey/KeyLike.
  * @param expiresIn - Expiry string in zeit/ms format (e.g. "15m", "7d").
- * @param options - Optional issuer and audience claims.
+ * @param options - Optional issuer, audience, algorithm, and keyId options.
  * @returns A compact JWT string.
  */
 export async function signToken(
   payload: JwtPayload,
-  secret: string,
+  keyOrSecret: ResolvedKey | string,
   expiresIn: string,
-  options?: JwtValidationConfig
+  options?: SignTokenOptions
 ): Promise<string> {
-  const secretKey = new TextEncoder().encode(secret);
+  const alg: SupportedAlgorithm = options?.algorithm ?? "HS256";
+
+  const key: ResolvedKey =
+    typeof keyOrSecret === "string" ? await importKeyInput(keyOrSecret, alg, "sign") : keyOrSecret;
 
   let builder = new SignJWT({ ...payload })
-    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setProtectedHeader({
+      alg,
+      typ: "JWT",
+      ...(options?.keyId !== undefined && { kid: options.keyId }),
+    })
     .setIssuedAt()
     .setExpirationTime(Math.floor(Date.now() / 1000) + parseExpiryToSeconds(expiresIn))
     .setJti(generateJti());
@@ -28,7 +43,8 @@ export async function signToken(
   if (options?.issuer !== undefined) builder = builder.setIssuer(options.issuer);
   if (options?.audience !== undefined) builder = builder.setAudience(options.audience);
 
-  const jwt = await builder.sign(secretKey);
+  // jose's SignJWT.sign accepts KeyLike | Uint8Array
+  const jwt = await builder.sign(key);
 
   return jwt;
 }

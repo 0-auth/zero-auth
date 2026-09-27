@@ -13,6 +13,7 @@ import { setCookie } from "./cookies/setCookie.js";
 import { clearCookie } from "./cookies/clearCookie.js";
 import { authErrorHandler } from "./errors/errorHandler.js";
 import { resolveConfig, parseExpiryToSeconds, withFamilyId } from "./utils/helpers.js";
+import { exportPublicKeyToJwk } from "./core/keys.js";
 
 import type { AuthConfig, JwtPayload, AuthUser, TokenPair, ResolvedConfig } from "./types/auth.js";
 
@@ -124,6 +125,24 @@ export interface AuthInstance {
    */
   rotateTokens(payload: JwtPayload): Promise<TokenPair>;
 
+  // ── JWKS Publisher ─────────────────────────────────────────────────────────
+
+  /**
+   * Returns the public key(s) formatted as a JSON Web Key Set (JWKS).
+   * Can be used to serve a custom JWKS endpoint or inspect published keys.
+   * Only available when asymmetric keys are configured.
+   * @example `const jwks = await auth.getJwks();`
+   */
+  getJwks(): Promise<{ keys: Record<string, unknown>[] }>;
+
+  /**
+   * Express route handler that serves the JWKS JSON.
+   * Sets `Content-Type: application/json` and `Cache-Control` headers.
+   * Only available when asymmetric keys are configured.
+   * @example `app.get("/.well-known/jwks.json", auth.jwksHandler());`
+   */
+  jwksHandler(): RequestHandler;
+
   // ── Express App Integration ────────────────────────────────────────────────
 
   /**
@@ -167,6 +186,36 @@ export function createAuth(config: AuthConfig): AuthInstance {
   const engine = createJwtEngine(resolved);
 
   const rotateTokens = createRotateTokens(engine);
+
+  let cachedJwks: { keys: Record<string, unknown>[] } | null = null;
+
+  const getJwks = async (): Promise<{ keys: Record<string, unknown>[] }> => {
+    if (!resolved.isAsymmetric || (!resolved.publicKey && !resolved.refreshPublicKey)) {
+      throw new Error(
+        "[zero-auth] getJwks() is only available when asymmetric keys ('publicKey') are configured."
+      );
+    }
+
+    if (cachedJwks) return cachedJwks;
+
+    const keys: Record<string, unknown>[] = [];
+    if (resolved.publicKey) {
+      const jwk = await exportPublicKeyToJwk(resolved.publicKey, {
+        ...(resolved.keyId !== undefined && { kid: resolved.keyId }),
+        alg: resolved.algorithm,
+      });
+      keys.push(jwk as unknown as Record<string, unknown>);
+    }
+    if (resolved.refreshPublicKey && resolved.refreshPublicKey !== resolved.publicKey) {
+      const jwk = await exportPublicKeyToJwk(resolved.refreshPublicKey, {
+        alg: resolved.algorithm,
+      });
+      keys.push(jwk as unknown as Record<string, unknown>);
+    }
+
+    cachedJwks = { keys };
+    return cachedJwks;
+  };
 
   return {
     config: resolved,
@@ -258,6 +307,24 @@ export function createAuth(config: AuthConfig): AuthInstance {
       return rotateTokens(payload);
     },
 
+    // ── JWKS Publisher ───────────────────────────────────────────────────────
+
+    getJwks() {
+      return getJwks();
+    },
+
+    jwksHandler(): RequestHandler {
+      return async (_req, res, next) => {
+        try {
+          const jwks = await getJwks();
+          res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+          res.json(jwks);
+        } catch (err) {
+          next(err);
+        }
+      };
+    },
+
     // ── App Integration ──────────────────────────────────────────────────────
 
     errorHandler: authErrorHandler,
@@ -279,6 +346,11 @@ export type {
   RefreshTokenStore,
   RefreshTokenContext,
   RefreshReuseContext,
+  SupportedAlgorithm,
+  SymmetricAlgorithm,
+  AsymmetricAlgorithm,
+  KeyInput,
+  RemoteJwksConfig,
 } from "./types/auth.js";
 export type { CookieOptions } from "./types/cookies.js";
 export { extractToken, extractRefreshToken } from "./utils/extractToken.js";
@@ -304,7 +376,20 @@ export type {
   RedisRevocationStore,
 } from "./refresh/redisRevocationStore.js";
 
+// Algorithm helpers & constants
+export {
+  SYMMETRIC_ALGORITHMS,
+  ASYMMETRIC_ALGORITHMS,
+  isAsymmetricAlgorithm,
+  isSymmetricAlgorithm,
+  type ResolvedKey,
+  type VerificationKey,
+} from "./core/keys.js";
+
 // Core utilities (for advanced usage)
-export { signToken } from "./core/sign.js";
-export { verifyToken } from "./core/verify.js";
+export { signToken, type SignTokenOptions } from "./core/sign.js";
+export { verifyToken, type VerifyTokenOptions } from "./core/verify.js";
 export { decodeToken } from "./core/decode.js";
+
+// JWKS utilities
+export { createJwksResolver, exportPublicKeyToJwk } from "./core/keys.js";

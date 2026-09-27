@@ -6,8 +6,24 @@ import { createAuth, createInMemoryRevocationStore } from "@0-auth/zero-auth";
 const store = createInMemoryRevocationStore(); // Replace with Redis in production.
 
 const auth = createAuth({
+  // 1. Symmetric Secrets (Default)
   accessSecret: process.env.JWT_ACCESS_SECRET!,
   refreshSecret: process.env.JWT_REFRESH_SECRET!,
+
+  // Or 2. Asymmetric Keys (RS256, ES256, EdDSA, PS256)
+  // algorithm: "RS256",
+  // privateKey: process.env.JWT_PRIVATE_KEY, // PKCS#8 PEM or CryptoKey
+  // publicKey: process.env.JWT_PUBLIC_KEY,   // SPKI PEM or CryptoKey (required)
+  // keyId: "auth-key-2026-v1",                // Optional 'kid' header claim
+
+  // Or 3. Remote JWKS Verification (Verifier-Only Mode)
+  // jwksUri: "https://auth.example.com/.well-known/jwks.json",
+  // jwks: {
+  //   cacheMaxAge: 600_000,     // 10 minutes cache
+  //   cooldownDuration: 30_000, // 30 seconds cooldown between rate-limited refetches
+  //   timeoutDuration: 5_000,   // 5 seconds fetch timeout
+  // },
+
   refreshStore: store,
   jwt: {
     issuer: "https://api.example.com",
@@ -42,7 +58,28 @@ when verifying access or refresh tokens. `clockTolerance` allows a small amount
 of clock skew in seconds; keep it low. Tokens with an `nbf` claim are checked by
 the underlying JWT verifier.
 
-## Required secrets
+## Key Modes
+
+`zero-auth` supports three key configurations:
+
+1. **Symmetric Mode (`HS256`, `HS384`, `HS512`)**:
+   - Requires `accessSecret` and `refreshSecret` (minimum 32 characters each).
+   - Fast, shared-secret signing and verification for single services.
+
+2. **Asymmetric Key Mode (`RS256`, `ES256`, `EdDSA`, `PS256`)**:
+   - Requires `publicKey` (SPKI PEM or CryptoKey).
+   - Requires `privateKey` (PKCS#8 PEM or CryptoKey) to issue tokens; omit `privateKey` for static verifier-only mode.
+   - Optional `keyId` sets the `kid` header claim in signed JWTs.
+   - Serves standard JWKS with `auth.jwksHandler()`.
+
+3. **Remote JWKS Mode (`jwksUri`)**:
+   - Dynamic verifier-only mode for downstream microservices and third-party IDPs (Clerk, Auth0, Firebase, Google, Cognito).
+   - Zero private keys; automatically fetches and caches verification keys from `/.well-known/jwks.json`.
+   - Tunable caching (`cacheMaxAge`), cooldown (`cooldownDuration`), and timeouts (`timeoutDuration`).
+
+See the [Asymmetric Keys & Remote JWKS guide](/guides/asymmetric-and-jwks) for full architecture examples.
+
+## Required secrets (Symmetric)
 
 - Both secrets must be at least 32 characters.
 - Use different secrets for access and refresh tokens.
